@@ -33,7 +33,14 @@ const nowPlaying: NowPlayingApi = {
       if (stateListeners.size === 0) ipcRenderer.send(IPC.npUnsubscribe)
     }
   },
-  command: (sessionId, command) => ipcRenderer.send(IPC.npCommand, sessionId, command)
+  command: (sessionId, command, value) => ipcRenderer.send(IPC.npCommand, sessionId, command, value)
+}
+
+/** Atajo: cada canal del objeto pasa a ser una función que invoca ese canal. */
+function invokers<T>(channels: Record<string, string>): T {
+  return Object.fromEntries(
+    Object.entries(channels).map(([name, channel]) => [name, (...args: unknown[]) => ipcRenderer.invoke(channel, ...args)])
+  ) as T
 }
 
 const api: NidoApi = {
@@ -46,7 +53,11 @@ const api: NidoApi = {
   pickAudioFolder: () => ipcRenderer.invoke(IPC.pickAudioFolder),
   mediaUrl: (filePath) => `${MEDIA_SCHEME}://local/${encodeURIComponent(filePath)}`,
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
-  nowPlaying
+  nowPlaying,
+  google: invokers<NidoApi['google']>(IPC.google),
+  notion: invokers<NidoApi['notion']>(IPC.notion),
+  browsers: invokers<NidoApi['browsers']>(IPC.browsers),
+  data: invokers<NidoApi['data']>(IPC.data)
 }
 
 contextBridge.exposeInMainWorld('nido', api)

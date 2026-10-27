@@ -5,7 +5,9 @@
 #   {"type":"state","sessions":[...]}        solo cuando algo cambia
 #   {"type":"thumb","key":"...","data":"..."} carátula en base64, una vez por pista
 #   {"type":"error","message":"..."}
-# Entrada (stdin, una orden por línea):  toggle|next|prev <SourceAppUserModelId>
+# Entrada (stdin, una orden JSON por línea):
+#   {"cmd":"toggle|next|prev|seek|shuffle|repeat","id":"<SourceAppUserModelId>","value":...}
+#   seek: segundos · shuffle: true/false · repeat: None|Track|List
 # Si stdin se cierra (Nido terminó), el script sale.
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +23,7 @@ try {
   $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
   $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
   $null = [Windows.Storage.Streams.IInputStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
+  $null = [Windows.Media.MediaPlaybackAutoRepeatMode, Windows.Media, ContentType = WindowsRuntime]
 } catch {
   Emit @{ type = 'error'; message = "Controles multimedia no disponibles: $($_.Exception.Message)" }
   exit 1
@@ -72,14 +75,20 @@ function Find-Session($id) {
 }
 
 function Invoke-Command($line) {
-  $parts = $line.Trim() -split ' ', 2
-  if ($parts.Count -lt 2) { return }
-  $session = Find-Session $parts[1]
+  $order = $line | ConvertFrom-Json
+  $session = Find-Session ([string]$order.id)
   if (-not $session) { return }
-  $operation = switch ($parts[0]) {
+  $operation = switch ([string]$order.cmd) {
     'toggle' { $session.TryTogglePlayPauseAsync() }
     'next' { $session.TrySkipNextAsync() }
     'prev' { $session.TrySkipPreviousAsync() }
+    'seek' {
+      # La posición se pide en ticks (100 ns) contando desde StartTime.
+      $start = $session.GetTimelineProperties().StartTime.Ticks
+      $session.TryChangePlaybackPositionAsync([long]($start + [double]$order.value * 10000000))
+    }
+    'shuffle' { $session.TryChangeShuffleActiveAsync([bool]$order.value) }
+    'repeat' { $session.TryChangeAutoRepeatModeAsync([Windows.Media.MediaPlaybackAutoRepeatMode]([string]$order.value)) }
     default { $null }
   }
   if ($operation) { $null = Await $operation ([bool]) }
@@ -109,6 +118,11 @@ function Get-Snapshot {
           canToggle = [bool]($playback.Controls.IsPlayPauseToggleEnabled -or $playback.Controls.IsPlayEnabled -or $playback.Controls.IsPauseEnabled)
           canNext   = [bool]$playback.Controls.IsNextEnabled
           canPrev   = [bool]$playback.Controls.IsPreviousEnabled
+          canSeek   = [bool]$playback.Controls.IsPlaybackPositionEnabled
+          canShuffle = [bool]$playback.Controls.IsShuffleEnabled
+          canRepeat = [bool]$playback.Controls.IsRepeatEnabled
+          shuffle   = if ($null -eq $playback.IsShuffleActive) { $null } else { [bool]$playback.IsShuffleActive }
+          repeat    = if ($null -eq $playback.AutoRepeatMode) { $null } else { $playback.AutoRepeatMode.ToString() }
           position  = [math]::Round($timeline.Position.TotalSeconds, 2)
           duration  = [math]::Round(($timeline.EndTime - $timeline.StartTime).TotalSeconds, 2)
           updatedAt = $timeline.LastUpdatedTime.ToUnixTimeMilliseconds()
@@ -133,7 +147,7 @@ $lastTimes = @{}
 # más de 2 s de lo previsto (salto en la pista). El avance normal lo interpola Nido.
 function Test-Changed($snapshot) {
   $signature = ($snapshot.sessions | ForEach-Object {
-      "$($_.id)|$($_.title)|$($_.artist)|$($_.album)|$($_.status)|$($_.canToggle)$($_.canNext)$($_.canPrev)|$($_.duration)|$($_.thumbKey)|$($_.current)"
+      "$($_.id)|$($_.title)|$($_.artist)|$($_.album)|$($_.status)|$($_.canToggle)$($_.canNext)$($_.canPrev)$($_.canSeek)$($_.canShuffle)$($_.canRepeat)|$($_.shuffle)|$($_.repeat)|$($_.duration)|$($_.thumbKey)|$($_.current)"
     }) -join "`n"
   if ($signature -ne $script:lastSignature) { return $signature }
   foreach ($session in $snapshot.sessions) {

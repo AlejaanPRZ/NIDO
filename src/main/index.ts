@@ -1,13 +1,22 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { join } from 'node:path'
-import { IPC, type AppState } from '../shared/types'
+import { APP_ID, IPC, type AppState } from '../shared/types'
+import { registerBrowsers } from './browsers'
+import { registerGoogle } from './google'
 import { handleMediaProtocol, pickAudioFiles, pickAudioFolder, registerMediaScheme } from './media'
+import { registerNotion } from './notion'
 import { registerNowPlaying } from './nowPlaying'
-import { loadState, loadWindowState, saveState, saveStateSync, saveWindowState } from './storage'
+import { loadState, loadWindowState, registerData, saveState, saveStateSync, saveWindowState } from './storage'
 
 const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test(url)
 
 let mainWindow: BrowserWindow | null = null
+
+// Solo en desarrollo: carpeta de datos aparte para probar sin tocar los datos reales.
+// Va antes del bloqueo de instancia única, que depende de esta carpeta.
+if (!app.isPackaged && process.env.NIDO_USER_DATA_DIR) {
+  app.setPath('userData', process.env.NIDO_USER_DATA_DIR)
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -34,7 +43,7 @@ function createWindow(): void {
     minWidth: 640,
     minHeight: 480,
     title: 'Nido',
-    backgroundColor: '#1b1814',
+    backgroundColor: '#e9ebf2',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -121,6 +130,10 @@ ipcMain.handle(IPC.openExternal, (_e, url: string) => {
   if (isHttpUrl(url)) return shell.openExternal(url)
 })
 registerNowPlaying()
+registerGoogle()
+registerNotion()
+registerBrowsers(() => mainWindow)
+registerData(() => mainWindow)
 
 app.on('second-instance', () => {
   if (!mainWindow) return
@@ -129,7 +142,7 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('app.nido.desktop')
+  app.setAppUserModelId(APP_ID)
   handleMediaProtocol()
   createWindow()
   app.on('activate', () => {

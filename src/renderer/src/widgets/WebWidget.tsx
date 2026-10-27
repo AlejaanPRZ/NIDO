@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { normalizeUrl } from '../util'
+import { useApp } from '../context'
 import { Icon } from '../icons'
+import { toast } from '../ui/feedback'
+import { MenuButton } from '../ui/Menu'
+import { normalizeUrl } from '../util'
 import type { WidgetProps } from './types'
 
 /**
- * Panel web basado en <webview>: proceso aislado, sin Node, con sesión
+ * Panel web integrado basado en <webview>: proceso aislado, sin Node, con sesión
  * persistente compartida entre paneles (partition "persist:nido-web").
+ * Es el motor Chromium de Nido; los navegadores instalados solo se usan para
+ * abrir la página fuera (menú ↗), nunca se incrustan.
  */
 export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
+  const { browsers, openSettings } = useApp()
+  const openIn = (browserId: string): void => {
+    void window.nido.browsers.open(browserId, [widget.data.url]).then((r) => !r.ok && toast(r.error, 'error'))
+  }
   const ref = useRef<WebviewElement>(null)
   // El src solo se fija al montar; después se navega con loadURL para no recargar en cada guardado.
   const [initialUrl] = useState(() => widget.data.url || 'https://duckduckgo.com')
@@ -91,27 +100,33 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
           <Icon name={loading ? 'close' : 'reload'} size={15} />
         </button>
         <input
-          className="input grow"
+          className="input tiny grow"
           value={address}
           spellCheck={false}
+          aria-label="Dirección del panel integrado"
+          title="Panel integrado: la página se muestra dentro de Nido"
           onChange={(e) => setAddress(e.target.value)}
           onFocus={(e) => e.target.select()}
         />
-        <button
-          type="button"
-          className="icon-btn"
-          title="Abrir en el navegador"
-          onClick={() => window.nido.openExternal(widget.data.url)}
+        <MenuButton
+          title="Abrir esta página en un navegador externo"
+          items={[
+            { header: 'Abrir fuera de Nido con' },
+            { label: 'Navegador predeterminado del sistema', onSelect: () => openIn('system') },
+            ...browsers.map((b) => ({ label: b.name, onSelect: () => openIn(b.id) })),
+            { separator: true },
+            { label: 'Gestionar navegadores…', icon: 'settings' as const, onSelect: () => openSettings('navegadores') }
+          ]}
         >
           <Icon name="arrowUpRight" size={15} />
-        </button>
+        </MenuButton>
       </form>
       <div className="web-view-wrap">
         <webview ref={ref} src={initialUrl} partition="persist:nido-web" className="web-view" />
         {failed && (
           <div className="web-error">
             <p>{failed}</p>
-            <button className="pill dark" onClick={() => ref.current?.reload()}>
+            <button className="btn primary" onClick={() => ref.current?.reload()}>
               Reintentar
             </button>
           </div>

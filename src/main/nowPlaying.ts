@@ -10,7 +10,8 @@ import scriptSource from './now-playing.ps1?raw'
 // las órdenes (pausa, siguiente…) se le envían por stdin. Solo está vivo
 // mientras haya algún widget suscrito.
 
-const COMMANDS: ReadonlySet<MediaCommand> = new Set(['toggle', 'next', 'prev'])
+const COMMANDS: ReadonlySet<MediaCommand> = new Set(['toggle', 'next', 'prev', 'seek', 'shuffle', 'repeat'])
+const REPEAT_MODES = new Set(['None', 'Track', 'List'])
 const MAX_THUMBS = 20
 const STOP_DELAY_MS = 10_000
 const MAX_RESTART_DELAY_MS = 30_000
@@ -137,10 +138,13 @@ function unsubscribe(wc: WebContents): void {
 export function registerNowPlaying(): void {
   ipcMain.on(IPC.npSubscribe, (event) => subscribe(event.sender))
   ipcMain.on(IPC.npUnsubscribe, (event) => unsubscribe(event.sender))
-  ipcMain.on(IPC.npCommand, (_event, sessionId: unknown, command: unknown) => {
-    if (!child || typeof sessionId !== 'string' || /[\r\n]/.test(sessionId)) return
-    if (!COMMANDS.has(command as MediaCommand)) return
-    child.stdin.write(`${command} ${sessionId}\n`)
+  ipcMain.on(IPC.npCommand, (_event, sessionId: unknown, command: unknown, value: unknown) => {
+    if (!child || typeof sessionId !== 'string' || !COMMANDS.has(command as MediaCommand)) return
+    // Cada orden se valida aquí; al script le llega JSON en una línea.
+    if (command === 'seek' && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) return
+    if (command === 'shuffle' && typeof value !== 'boolean') return
+    if (command === 'repeat' && !REPEAT_MODES.has(value as string)) return
+    child.stdin.write(JSON.stringify({ cmd: command, id: sessionId, value: value ?? null }) + '\n')
   })
   app.on('before-quit', stop)
 }

@@ -1,42 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import GridLayout, { WidthProvider, type Layout } from 'react-grid-layout'
-import type { Theme, Widget, WidgetDataMap, WidgetType } from '../../shared/types'
-import { Icon, type IconName } from './icons'
-import { WIDGETS, WIDGET_TYPES } from './registry'
-import { GRID_COLS, useNidoStore } from './store'
+import type { AppState, Widget, WidgetDataMap, WidgetType, Workspace } from '../../shared/types'
+import { CommandPalette } from './CommandPalette'
+import { AppContext, useBrowsers, type AppContextValue, type SettingsSection } from './context'
+import { Icon } from './icons'
+import { COLLAPSED_H, WIDGETS } from './registry'
+import { SettingsDialog } from './Settings'
+import { GRID_COLS, useNidoStore, WORKSPACES, type Action } from './store'
+import { Topbar } from './Topbar'
+import { EmptyState } from './ui/controls'
+import { FeedbackLayer } from './ui/feedback'
+import { hasOpenLayer, useEscape } from './ui/Modal'
+import { hostOf } from './util'
+import { Welcome } from './Welcome'
 import { WidgetFrame } from './WidgetFrame'
-import { CalendarWidget } from './widgets/CalendarWidget'
-import { MusicWidget } from './widgets/MusicWidget'
+import { CalendarWidget } from './widgets/calendar/CalendarWidget'
+import { LinksWidget } from './widgets/LinksWidget'
+import { MusicWidget } from './widgets/music/MusicWidget'
 import { NotesWidget } from './widgets/NotesWidget'
-import { TasksWidget } from './widgets/TasksWidget'
+import { TasksWidget } from './widgets/tasks/TasksWidget'
 import { WebWidget } from './widgets/WebWidget'
 
 const Grid = WidthProvider(GridLayout)
-
-const THEMES: Record<Theme, { label: string; icon: IconName; next: Theme }> = {
-  system: { label: 'Sistema', icon: 'monitor', next: 'light' },
-  light: { label: 'Claro', icon: 'sun', next: 'dark' },
-  dark: { label: 'Oscuro', icon: 'moon', next: 'system' }
-}
-
-const dateFormat = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
-
-function greeting(hour: number): string {
-  if (hour < 6) return 'Buenas noches.'
-  if (hour < 13) return 'Buenos días.'
-  if (hour < 21) return 'Buenas tardes.'
-  return 'Buenas noches.'
-}
-
-/** Re-renderiza cada minuto para que el saludo y la fecha no se queden viejos. */
-function useNow(): Date {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
-  return now
-}
 
 function renderWidget(widget: Widget, update: (patch: Partial<WidgetDataMap[WidgetType]>) => void): JSX.Element {
   switch (widget.type) {
@@ -50,141 +35,255 @@ function renderWidget(widget: Widget, update: (patch: Partial<WidgetDataMap[Widg
       return <MusicWidget widget={widget} update={update} />
     case 'web':
       return <WebWidget widget={widget} update={update} />
+    case 'links':
+      return <LinksWidget widget={widget} update={update} />
   }
+}
+
+/** Una línea que resume el widget cuando está plegado. */
+function summaryOf(widget: Widget): string {
+  switch (widget.type) {
+    case 'notes':
+      return widget.data.text.trim().split('\n')[0]?.slice(0, 60) || 'Vacía'
+    case 'tasks': {
+      if (widget.data.source === 'notion') return `Notion · ${widget.data.notion?.name ?? 'sin base de datos'}`
+      const open = widget.data.tasks.filter((t) => !t.done).length
+      return `${open} pendiente${open === 1 ? '' : 's'}`
+    }
+    case 'calendar':
+      return widget.data.source === 'google' ? 'Google Calendar' : `${widget.data.events.length} eventos locales`
+    case 'music':
+      return widget.data.source === 'local'
+        ? (widget.data.tracks[widget.data.current]?.name ?? 'Sin canciones')
+        : 'Ahora suena'
+    case 'web':
+      return hostOf(widget.data.url)
+    case 'links': {
+      const n = widget.data.groups.reduce((s, g) => s + g.links.length, 0)
+      return `${n} enlace${n === 1 ? '' : 's'}`
+    }
+  }
+}
+
+function WorkspaceGrid({
+  workspace,
+  active,
+  locked,
+  expanded,
+  highlighted,
+  dispatch,
+  onExpand,
+  onInteract
+}: {
+  workspace: Workspace
+  active: boolean
+  locked: boolean
+  expanded: string | null
+  highlighted: string | null
+  dispatch(a: Action): void
+  onExpand(id: string | null): void
+  onInteract(on: boolean): void
+}): JSX.Element {
+  const layout: Layout[] = workspace.layout.map((l) => {
+    const widget = workspace.widgets.find((w) => w.id === l.i)
+    const size = widget ? WIDGETS[widget.type].size : undefined
+    const collapsed = !!widget?.collapsed
+    return {
+      ...l,
+      minW: size?.minW,
+      minH: collapsed ? COLLAPSED_H : size?.minH,
+      maxH: collapsed ? COLLAPSED_H : undefined,
+      isResizable: !collapsed
+    }
+  })
+
+  return (
+    // Los espacios inactivos siguen montados (ocultos) para que la música o las webs no se corten.
+    <div className={`workspace ${active ? 'active' : 'inactive'}`} aria-hidden={!active}>
+      {workspace.widgets.length === 0 && active && (
+        <EmptyState icon={<Icon name="plus" size={20} />} title={`${workspace.name} está vacío`}>
+          Añade un widget con el botón + de arriba o con Ctrl+K.
+        </EmptyState>
+      )}
+      <Grid
+        className="grid"
+        layout={layout}
+        cols={GRID_COLS}
+        rowHeight={32}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        draggableHandle=".widget-drag"
+        draggableCancel=".no-drag"
+        isDraggable={!locked}
+        isResizable={!locked}
+        compactType="vertical"
+        // Sin transform CSS: así un widget ampliado (position: fixed) se coloca respecto a la ventana.
+        useCSSTransforms={false}
+        onLayoutChange={(next) => dispatch({ type: 'layout', workspace: workspace.id, layout: next })}
+        onDragStart={() => onInteract(true)}
+        onDragStop={() => onInteract(false)}
+        onResizeStart={() => onInteract(true)}
+        onResizeStop={() => onInteract(false)}
+      >
+        {workspace.widgets.map((widget) => (
+          <div key={widget.id} className={expanded === widget.id ? 'has-expanded' : ''}>
+            <WidgetFrame
+              widget={widget}
+              workspaceId={workspace.id}
+              locked={locked}
+              expanded={expanded === widget.id}
+              highlighted={highlighted === widget.id}
+              summary={summaryOf(widget)}
+              onExpand={(on) => onExpand(on ? widget.id : null)}
+            >
+              {renderWidget(widget, (patch) => dispatch({ type: 'patch', id: widget.id, patch }))}
+            </WidgetFrame>
+          </div>
+        ))}
+      </Grid>
+    </div>
+  )
 }
 
 export default function App(): JSX.Element {
   const { state, dispatch, ready } = useNidoStore()
-  const { theme, locked } = state.settings
-  const now = useNow()
+  const { settings } = state
+  const { browsers, refresh: refreshBrowsers } = useBrowsers()
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [highlighted, setHighlighted] = useState<string | null>(null)
   // Mientras se arrastra o redimensiona, los <webview> no deben capturar el ratón.
   const [interacting, setInteracting] = useState(false)
 
+  // La bienvenida aparece una sola vez: queda marcada en el estado guardado.
   useEffect(() => {
-    if (theme === 'system') delete document.documentElement.dataset.theme
-    else document.documentElement.dataset.theme = theme
-  }, [theme])
+    if (ready && !state.settings.welcomeSeen) setWelcomeOpen(true)
+    // Solo al terminar de cargar.
+  }, [ready])
 
-  const layout: Layout[] = state.layout.map((l) => {
-    const widget = state.widgets.find((w) => w.id === l.i)
-    const size = widget ? WIDGETS[widget.type].size : undefined
-    return { ...l, minW: size?.minW, minH: size?.minH }
-  })
+  const closeWelcome = useCallback(() => {
+    setWelcomeOpen(false)
+    dispatch({ type: 'settings', patch: { welcomeSeen: true } })
+  }, [dispatch])
 
-  const pendingTasks = state.widgets.reduce(
-    (n, w) => (w.type === 'tasks' ? n + w.data.tasks.filter((t) => !t.done).length : n),
-    0
+  const showWelcome = useCallback(() => {
+    setSettingsSection(null)
+    setWelcomeOpen(true)
+    document.querySelector('.app')?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  // Tema, transparencia y movimiento se aplican como atributos en <html>.
+  useEffect(() => {
+    const root = document.documentElement
+    if (settings.theme === 'system') delete root.dataset.theme
+    else root.dataset.theme = settings.theme
+    root.dataset.transparency = settings.reduceTransparency ? 'reduced' : 'full'
+    root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
+  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion])
+
+  // Al cambiar de espacio se cierra el widget ampliado.
+  useEffect(() => setExpanded(null), [state.activeWorkspace])
+
+  const focusWidget = useCallback(
+    (id: string) => {
+      const ws = state.workspaces.find((w) => w.widgets.some((x) => x.id === id))
+      if (ws) dispatch({ type: 'workspace', id: ws.id })
+      setHighlighted(id)
+      setTimeout(() => setHighlighted((h) => (h === id ? null : h)), 1800)
+    },
+    [state.workspaces, dispatch]
   )
 
-  const start = (): void => setInteracting(true)
-  const stop = (): void => setInteracting(false)
+  useEscape(() => setExpanded(null), expanded !== null)
+
+  // Atajos de teclado globales.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+        return
+      }
+      if (hasOpenLayer() && !paletteOpen) return
+      if (mod && e.key === ',') {
+        e.preventDefault()
+        setSettingsSection('general')
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        dispatch({ type: 'settings', patch: { locked: !state.settings.locked } })
+      } else if (mod && ['1', '2', '3'].includes(e.key)) {
+        e.preventDefault()
+        dispatch({ type: 'workspace', id: WORKSPACES[Number(e.key) - 1].id })
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        if (!state.settings.locked) dispatch({ type: 'add', widgetType: 'notes' })
+      } else if (e.key === 'F1') {
+        e.preventDefault()
+        showWelcome()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dispatch, state.settings.locked, paletteOpen, showWelcome])
+
+  const context = useMemo<AppContextValue>(
+    () => ({
+      dispatch,
+      settings,
+      browsers,
+      refreshBrowsers,
+      openSettings: (section = 'general') => setSettingsSection(section)
+    }),
+    [dispatch, settings, browsers, refreshBrowsers]
+  )
 
   return (
-    <div className={`app ${interacting ? 'is-interacting' : ''}`}>
-      <div className="shell">
-        <header className="topbar">
-          <div className="topbar-left">
-            <span className="brand">nido</span>
-            <span className="pill static">{dateFormat.format(now)}</span>
-          </div>
-          <nav className="topbar-right">
-            <button
-              className="text-link"
-              title="Bloquea la distribución para no mover widgets sin querer"
-              onClick={() => dispatch({ type: 'settings', patch: { locked: !locked } })}
-            >
-              <Icon name={locked ? 'lock' : 'unlock'} size={14} />
-              {locked ? 'Bloqueado' : 'Editable'}
-            </button>
-            <span className="sep">/</span>
-            <button
-              className="text-link"
-              title="Cambiar tema"
-              onClick={() => dispatch({ type: 'settings', patch: { theme: THEMES[theme].next } })}
-            >
-              <Icon name={THEMES[theme].icon} size={14} />
-              {THEMES[theme].label}
-            </button>
-          </nav>
-        </header>
-
-        <section className="hero">
-          <h1 className="hero-title">
-            {greeting(now.getHours())}{' '}
-            <span className="soft">
-              {pendingTasks > 0
-                ? `Tienes ${pendingTasks} tarea${pendingTasks === 1 ? '' : 's'} pendiente${pendingTasks === 1 ? '' : 's'}.`
-                : 'Todo lo tuyo, en un mismo nido.'}
-            </span>
-          </h1>
-          <div className="hero-actions">
-            <span className="tag">Añadir</span>
-            {WIDGET_TYPES.map((type, i) => (
-              <button
-                key={type}
-                className={`pill ${i === 0 ? 'dark' : ''}`}
-                disabled={locked}
-                title={`Añadir ${WIDGETS[type].label.toLowerCase()}`}
-                onClick={() => dispatch({ type: 'add', widgetType: type })}
-              >
-                <Icon name={WIDGETS[type].icon} size={14} />
-                {WIDGETS[type].label}
-              </button>
-            ))}
-          </div>
-        </section>
-
+    <AppContext.Provider value={context}>
+      <div className={`app ${interacting ? 'is-interacting' : ''} ${expanded ? 'has-expanded-widget' : ''}`}>
+        <div className="wallpaper" aria-hidden />
+        <Topbar state={state} onSearch={() => setPaletteOpen(true)} />
         <main className="board">
-          {ready && state.widgets.length === 0 && (
-            <div className="board-empty">
-              <span className="empty-badge">
-                <Icon name="plus" size={20} />
-              </span>
-              <p>Tu nido está vacío. Añade un widget para empezar.</p>
-            </div>
-          )}
-          {ready && (
-            <Grid
-              className="grid"
-              layout={layout}
-              cols={GRID_COLS}
-              rowHeight={32}
-              margin={[16, 16]}
-              containerPadding={[0, 0]}
-              draggableHandle=".widget-drag"
-              draggableCancel=".no-drag"
-              isDraggable={!locked}
-              isResizable={!locked}
-              compactType="vertical"
-              onLayoutChange={(next) => dispatch({ type: 'layout', layout: next })}
-              onDragStart={start}
-              onDragStop={stop}
-              onResizeStart={start}
-              onResizeStop={stop}
-            >
-              {state.widgets.map((widget) => (
-                <div key={widget.id}>
-                  <WidgetFrame
-                    widget={widget}
-                    locked={locked}
-                    onRename={(title) => dispatch({ type: 'rename', id: widget.id, title })}
-                    onRemove={() => dispatch({ type: 'remove', id: widget.id })}
-                  >
-                    {renderWidget(widget, (patch) => dispatch({ type: 'patch', id: widget.id, patch }))}
-                  </WidgetFrame>
-                </div>
-              ))}
-            </Grid>
-          )}
+          {welcomeOpen && <Welcome onClose={closeWelcome} />}
+          {ready &&
+            state.workspaces.map((ws) => (
+              <WorkspaceGrid
+                key={ws.id}
+                workspace={ws}
+                active={ws.id === state.activeWorkspace}
+                locked={settings.locked}
+                expanded={expanded}
+                highlighted={highlighted}
+                dispatch={dispatch}
+                onExpand={setExpanded}
+                onInteract={setInteracting}
+              />
+            ))}
         </main>
-
-        <footer className="footer">
-          <span>Nido · tus datos se guardan solo en este equipo</span>
-          <span>
-            {state.widgets.length} widget{state.widgets.length === 1 ? '' : 's'}
-          </span>
-        </footer>
+        {expanded && <div className="expand-scrim" onClick={() => setExpanded(null)} aria-hidden />}
       </div>
-    </div>
+
+      {paletteOpen && (
+        <CommandPalette
+          state={state}
+          onClose={() => setPaletteOpen(false)}
+          onFocusWidget={focusWidget}
+          onShowWelcome={showWelcome}
+        />
+      )}
+      {settingsSection && (
+        <SettingsDialog
+          state={state}
+          section={settingsSection}
+          onSection={setSettingsSection}
+          onClose={() => setSettingsSection(null)}
+          onShowWelcome={showWelcome}
+          onImport={(next: AppState) => dispatch({ type: 'hydrate', state: next })}
+        />
+      )}
+      <FeedbackLayer />
+    </AppContext.Provider>
   )
 }
