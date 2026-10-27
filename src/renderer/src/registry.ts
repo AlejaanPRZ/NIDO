@@ -30,8 +30,8 @@ export const WIDGETS: { [K in WidgetType]: WidgetDefinition<K> } = {
   music: {
     label: 'Música',
     icon: 'music',
-    size: { w: 4, h: 8, minW: 3, minH: 5 },
-    createData: () => ({ tracks: [], current: 0, volume: 0.8 })
+    size: { w: 4, h: 9, minW: 3, minH: 7 },
+    createData: () => ({ source: 'system', tracks: [], current: 0, volume: 0.8 })
   },
   web: {
     label: 'Panel web',

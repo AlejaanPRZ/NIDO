@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { join } from 'node:path'
 import { IPC, type AppState } from '../shared/types'
 import { handleMediaProtocol, pickAudioFiles, pickAudioFolder, registerMediaScheme } from './media'
+import { registerNowPlaying } from './nowPlaying'
 import { loadState, loadWindowState, saveState, saveStateSync, saveWindowState } from './storage'
 
 const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test(url)
@@ -119,6 +120,7 @@ ipcMain.handle(IPC.pickAudioFolder, () => pickAudioFolder(mainWindow))
 ipcMain.handle(IPC.openExternal, (_e, url: string) => {
   if (isHttpUrl(url)) return shell.openExternal(url)
 })
+registerNowPlaying()
 
 app.on('second-instance', () => {
   if (!mainWindow) return

@@ -831,6 +831,187 @@ input[type='range']:disabled {
   gap: 4px;
 }
 
+.local-player,
+.system-player {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Selector de dos opciones dentro de una cápsula hundida. */
+.segmented {
+  display: flex;
+  padding: 3px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  background: var(--inset);
+  flex-shrink: 0;
+}
+
+.segmented button {
+  flex: 1;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.segmented button.active {
+  background: var(--pill);
+  color: var(--text);
+  box-shadow: var(--shadow-pill);
+}
+
+.session-switch {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  flex-shrink: 0;
+}
+
+.session-switch::-webkit-scrollbar {
+  display: none;
+}
+
+.system-player {
+  overflow-y: auto;
+}
+
+.np-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.artwork {
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--inset);
+  color: var(--soft);
+  box-shadow: var(--shadow-pill);
+}
+
+.artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.np-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.np-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-bottom: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--pill);
+  box-shadow: var(--shadow-pill);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2fb36b;
+  box-shadow: 0 0 0 3px rgba(47, 179, 107, 0.18);
+  flex-shrink: 0;
+}
+
+.np-artist,
+.np-album {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-artist {
+  font-weight: 550;
+}
+
+.np-album {
+  font-size: 11.5px;
+}
+
+.progress {
+  height: 4px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: var(--inset);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ink);
+  transition: width 0.5s linear;
+}
+
+.transport.center {
+  justify-content: center;
+  gap: 18px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.np-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  padding: 8px;
+}
+
+.np-empty p {
+  margin: 0;
+  font-size: 12px;
+  max-width: 240px;
+}
+
+.np-empty .np-empty-title {
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.empty-badge.small {
+  width: 44px;
+  height: 44px;
+}
+
 .np-title {
   font-weight: 700;
   font-size: 17px;
