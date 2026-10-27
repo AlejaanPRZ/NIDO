@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Widget } from '../../shared/types'
+import { Icon } from './icons'
 import { WIDGETS } from './registry'
 
 interface Props {
@@ -30,7 +31,9 @@ export function WidgetFrame({ widget, locked, onRename, onRemove, children }: Pr
   return (
     <section className={`widget widget-${widget.type}`}>
       <header className={`widget-header ${locked ? '' : 'widget-drag'}`}>
-        <span className="widget-icon">{WIDGETS[widget.type].icon}</span>
+        <span className="widget-badge">
+          <Icon name={WIDGETS[widget.type].icon} size={15} />
+        </span>
         {editing ? (
           <input
             className="widget-title-input no-drag"
@@ -55,15 +58,16 @@ export function WidgetFrame({ widget, locked, onRename, onRemove, children }: Pr
             {widget.title}
           </span>
         )}
-        {!locked && (
-          <button
-            className={`icon-btn no-drag ${confirming ? 'danger' : ''}`}
-            title={confirming ? 'Pulsa otra vez para eliminar' : 'Eliminar widget'}
-            onClick={() => (confirming ? onRemove() : setConfirming(true))}
-          >
-            {confirming ? '¿Eliminar?' : '×'}
-          </button>
-        )}
+        {!locked &&
+          (confirming ? (
+            <button className="pill danger small no-drag" onClick={onRemove}>
+              Eliminar
+            </button>
+          ) : (
+            <button className="icon-btn no-drag" title="Eliminar widget" onClick={() => setConfirming(true)}>
+              <Icon name="close" size={14} />
+            </button>
+          ))}
       </header>
       <div className="widget-body no-drag">{children}</div>
     </section>

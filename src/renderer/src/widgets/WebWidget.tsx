@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { normalizeUrl } from '../util'
+import { Icon } from '../icons'
 import type { WidgetProps } from './types'
 
 /**
@@ -70,7 +71,7 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
         }}
       >
         <button type="button" className="icon-btn" title="Atrás" disabled={!nav.back} onClick={() => ref.current?.goBack()}>
-          ←
+          <Icon name="arrowLeft" size={15} />
         </button>
         <button
           type="button"
@@ -79,7 +80,7 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
           disabled={!nav.forward}
           onClick={() => ref.current?.goForward()}
         >
-          →
+          <Icon name="arrowRight" size={15} />
         </button>
         <button
           type="button"
@@ -87,7 +88,7 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
           title={loading ? 'Detener' : 'Recargar'}
           onClick={() => (loading ? ref.current?.stop() : ref.current?.reload())}
         >
-          {loading ? '×' : '↻'}
+          <Icon name={loading ? 'close' : 'reload'} size={15} />
         </button>
         <input
           className="input grow"
@@ -102,7 +103,7 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
           title="Abrir en el navegador"
           onClick={() => window.nido.openExternal(widget.data.url)}
         >
-          ↗
+          <Icon name="arrowUpRight" size={15} />
         </button>
       </form>
       <div className="web-view-wrap">
@@ -110,7 +111,7 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
         {failed && (
           <div className="web-error">
             <p>{failed}</p>
-            <button className="btn" onClick={() => ref.current?.reload()}>
+            <button className="pill dark" onClick={() => ref.current?.reload()}>
               Reintentar
             </button>
           </div>

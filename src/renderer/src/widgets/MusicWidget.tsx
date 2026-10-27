@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Track } from '../../../shared/types'
 import { formatTime } from '../util'
+import { Icon } from '../icons'
 import type { WidgetProps } from './types'
 
 export function MusicWidget({ widget, update }: WidgetProps<'music'>): JSX.Element {
@@ -106,14 +107,17 @@ export function MusicWidget({ widget, update }: WidgetProps<'music'>): JSX.Eleme
 
       <div className="row transport">
         <button className="icon-btn big" title="Anterior" disabled={!track} onClick={() => select(current - 1)}>
-          ⏮
+          <Icon name="skipBack" size={18} />
         </button>
-        <button className="btn primary play" title={playing ? 'Pausa' : 'Reproducir'} disabled={!track} onClick={toggle}>
-          {playing ? '❚❚' : '▶'}
+        <button className="pill dark round play" title={playing ? 'Pausa' : 'Reproducir'} disabled={!track} onClick={toggle}>
+          <Icon name={playing ? 'pause' : 'play'} size={18} />
         </button>
         <button className="icon-btn big" title="Siguiente" disabled={!track} onClick={() => select(current + 1)}>
-          ⏭
+          <Icon name="skipForward" size={18} />
         </button>
+        <span className="volume-icon muted">
+          <Icon name="volume" size={15} />
+        </span>
         <input
           className="volume grow"
           type="range"
@@ -135,18 +139,20 @@ export function MusicWidget({ widget, update }: WidgetProps<'music'>): JSX.Eleme
               {t.name}
             </button>
             <button className="icon-btn" title="Quitar de la lista" onClick={() => removeTrack(i)}>
-              ×
+              <Icon name="close" size={13} />
             </button>
           </li>
         ))}
       </ul>
 
       <div className="row widget-footer">
-        <button className="btn" onClick={() => window.nido.pickAudioFiles().then(addTracks)}>
-          + Archivos
+        <button className="pill" onClick={() => window.nido.pickAudioFiles().then(addTracks)}>
+          <Icon name="plus" size={14} />
+          Archivos
         </button>
-        <button className="btn" onClick={() => window.nido.pickAudioFolder().then(addTracks)}>
-          + Carpeta
+        <button className="pill" onClick={() => window.nido.pickAudioFolder().then(addTracks)}>
+          <Icon name="folder" size={14} />
+          Carpeta
         </button>
         <span className="grow" />
         {tracks.length > 0 && (

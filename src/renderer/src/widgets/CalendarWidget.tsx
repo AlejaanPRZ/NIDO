@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { dateKey, uid } from '../util'
+import { Icon } from '../icons'
 import type { WidgetProps } from './types'
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
@@ -54,14 +55,14 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
     <div className="calendar">
       <div className="row cal-head">
         <button className="icon-btn" title="Mes anterior" onClick={() => shiftMonth(-1)}>
-          ‹
+          <Icon name="chevronLeft" />
         </button>
         <span className="cal-month grow">{monthFormat.format(new Date(cursor.year, cursor.month, 1))}</span>
-        <button className="link-btn" onClick={goToday}>
+        <button className="pill small" onClick={goToday}>
           Hoy
         </button>
         <button className="icon-btn" title="Mes siguiente" onClick={() => shiftMonth(1)}>
-          ›
+          <Icon name="chevronRight" />
         </button>
       </div>
 
@@ -103,7 +104,7 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
                 title="Eliminar evento"
                 onClick={() => update({ events: events.filter((e) => e.id !== ev.id) })}
               >
-                ×
+                <Icon name="close" size={13} />
               </button>
             </li>
           ))}
@@ -117,8 +118,8 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
         >
           <input className="input time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           <input className="input grow" value={title} placeholder="Nuevo evento" onChange={(e) => setTitle(e.target.value)} />
-          <button className="btn primary" type="submit" disabled={!title.trim()}>
-            +
+          <button className="pill dark round" type="submit" title="Añadir evento" disabled={!title.trim()}>
+            <Icon name="plus" size={14} />
           </button>
         </form>
       </div>

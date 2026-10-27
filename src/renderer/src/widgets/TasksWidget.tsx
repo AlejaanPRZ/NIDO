@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { uid } from '../util'
+import { Icon } from '../icons'
 import type { WidgetProps } from './types'
 
 export function TasksWidget({ widget, update }: WidgetProps<'tasks'>): JSX.Element {
@@ -24,7 +25,8 @@ export function TasksWidget({ widget, update }: WidgetProps<'tasks'>): JSX.Eleme
         }}
       >
         <input className="input grow" value={draft} placeholder="Nueva tarea" onChange={(e) => setDraft(e.target.value)} />
-        <button className="btn primary" type="submit" disabled={!draft.trim()}>
+        <button className="pill dark" type="submit" disabled={!draft.trim()}>
+          <Icon name="plus" size={14} />
           Añadir
         </button>
       </form>
@@ -46,7 +48,7 @@ export function TasksWidget({ widget, update }: WidgetProps<'tasks'>): JSX.Eleme
               title="Eliminar tarea"
               onClick={() => update({ tasks: tasks.filter((t) => t.id !== task.id) })}
             >
-              ×
+              <Icon name="close" size={13} />
             </button>
           </li>
         ))}
