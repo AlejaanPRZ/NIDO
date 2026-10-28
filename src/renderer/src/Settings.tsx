@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionAccess, NotionLinkCheck, NotionStatus, Palette, Theme } from '../../shared/types'
+import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionAccess, NotionLinkCheck, NotionStatus, Palette, Theme, UpdateStatus } from '../../shared/types'
 import { BrandLogo, brandOfBrowser, hasBrand } from './BrandLogo'
 import { CATALOG } from './catalog'
 import { useApp, type SettingsSection } from './context'
@@ -224,10 +224,49 @@ function GeneralSection(): JSX.Element {
           checked={settings.locked}
           onChange={(v) => set({ locked: v })}
         />
+        <Toggle
+          label="Mascota"
+          description={
+            settings.reduceMotion
+              ? 'Un braco de Weimar en pixel art. Con «Reducir movimiento» se queda sentado en la esquina.'
+              : 'Un braco de Weimar en pixel art pasea por el borde inferior: olfatea, se sienta, se rasca, duerme… Haz clic en él para acariciarlo.'
+          }
+          checked={settings.mascot}
+          onChange={(v) => set({ mascot: v })}
+        />
+      </Group>
+      <Group title="Ventana">
+        <Toggle
+          label="Mantener en la bandeja al cerrar"
+          description="Al cerrar la ventana, Nido sigue en la bandeja del sistema (junto al reloj de Windows). Para salir del todo: clic derecho en su icono → Salir de Nido."
+          checked={settings.closeToTray}
+          onChange={(v) => set({ closeToTray: v })}
+        />
+        <div className="setting-row">
+          <span className="grow">
+            Atajo para mostrar u ocultar Nido
+            <small className="muted">Funciona desde cualquier aplicación.</small>
+          </span>
+          <select className="chip-select" aria-label="Atajo global" value={settings.globalShortcut} onChange={(e) => set({ globalShortcut: e.target.value })}>
+            {SHORTCUT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </Group>
     </>
   )
 }
+
+const SHORTCUT_OPTIONS = [
+  { value: 'Control+Alt+N', label: 'Ctrl + Alt + N' },
+  { value: 'Control+Shift+Space', label: 'Ctrl + Mayús + Espacio' },
+  { value: 'Control+Alt+Space', label: 'Ctrl + Alt + Espacio' },
+  { value: 'Alt+Shift+N', label: 'Alt + Mayús + N' },
+  { value: '', label: 'Sin atajo' }
+]
 
 // ---------- Conexiones ----------
 
@@ -1140,6 +1179,49 @@ function ShortcutsSection(): JSX.Element {
   )
 }
 
+const UPDATE_TEXT: Record<UpdateStatus['state'], string> = {
+  unavailable: '',
+  idle: 'Nido busca versiones nuevas al arrancar y cada 6 horas.',
+  checking: 'Buscando…',
+  uptodate: 'Tienes la última versión.',
+  downloading: 'Descargando',
+  ready: 'Lista para instalar.',
+  error: ''
+}
+
+/** Versión instalada y actualizaciones automáticas. */
+function UpdatesGroup(): JSX.Element {
+  const [status, setStatus] = useState<UpdateStatus | null>(null)
+  useEffect(() => {
+    void window.nido.app.updateStatus().then(setStatus)
+    return window.nido.app.onUpdate(setStatus)
+  }, [])
+  if (!status) return <Spinner />
+  const busy = status.state === 'checking' || status.state === 'downloading'
+  const text =
+    status.state === 'downloading'
+      ? `Descargando Nido ${status.version}… ${status.progress ?? 0} %`
+      : status.state === 'ready'
+        ? `Nido ${status.version} está descargado. Se instala al reiniciar.`
+        : status.message ?? UPDATE_TEXT[status.state]
+  return (
+    <Group title="Versión" description={`Nido ${status.current}`}>
+      <div className="setting-row">
+        <span className={`grow small-text ${status.state === 'error' ? 'error-text' : 'muted'}`}>{text}</span>
+        {status.state === 'ready' ? (
+          <button className="btn small primary" onClick={() => void window.nido.app.installUpdate()}>
+            Reiniciar e instalar
+          </button>
+        ) : status.state !== 'unavailable' ? (
+          <button className="btn small" disabled={busy} onClick={() => void window.nido.app.checkUpdates().then(setStatus)}>
+            {busy ? 'Buscando…' : 'Buscar actualizaciones'}
+          </button>
+        ) : null}
+      </div>
+    </Group>
+  )
+}
+
 function HelpSection({ onShowWelcome }: { onShowWelcome(): void }): JSX.Element {
   return (
     <>
@@ -1160,7 +1242,8 @@ function HelpSection({ onShowWelcome }: { onShowWelcome(): void }): JSX.Element 
           <li>Los widgets de espacios ocultos no consultan datos; la música y los temporizadores siguen.</li>
         </ul>
       </Group>
-      <p className="muted small-text">Nido 0.3 · Tus datos se guardan solo en este equipo.</p>
+      <UpdatesGroup />
+      <p className="muted small-text">Tus datos se guardan solo en este equipo.</p>
     </>
   )
 }

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen, session, shell } from 'electron'
 import { join } from 'node:path'
-import { APP_ID, IPC, type AppState } from '../shared/types'
+import { APP_ID, IPC, type AppBehavior, type AppState } from '../shared/types'
 import { registerBrowsers } from './browsers'
 import { registerFiles } from './files'
 import { registerGoogle } from './google'
@@ -10,6 +10,8 @@ import { handleMediaProtocol, pickAudioFiles, pickAudioFolder, registerMediaSche
 import { registerNotion } from './notion'
 import { registerNowPlaying } from './nowPlaying'
 import { loadState, loadWindowState, registerData, saveState, saveStateSync, saveWindowState } from './storage'
+import { attachWindow, setBehavior, setupTray, show } from './tray'
+import { registerUpdater } from './updater'
 
 const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test(url)
 
@@ -79,6 +81,7 @@ function createWindow(): void {
   win.on('maximize', schedulePersist)
   win.on('unmaximize', schedulePersist)
   win.on('close', persistBounds)
+  attachWindow(win, () => mainWindow)
   win.on('closed', () => {
     clearTimeout(boundsTimer)
     mainWindow = null
@@ -140,12 +143,11 @@ registerData(() => mainWindow)
 registerFiles(() => mainWindow)
 registerInfo()
 registerSystem()
+registerUpdater(() => mainWindow)
+ipcMain.handle(IPC.app.setBehavior, (_e, behavior: AppBehavior) => setBehavior(behavior, () => mainWindow))
 
-app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.focus()
-})
+// Abrir Nido otra vez (acceso directo) muestra la ventana, también si estaba en la bandeja.
+app.on('second-instance', () => show(mainWindow))
 
 app.whenReady().then(() => {
   app.setAppUserModelId(APP_ID)
@@ -154,6 +156,7 @@ app.whenReady().then(() => {
   const web = session.fromPartition('persist:nido-web')
   web.setUserAgent(web.getUserAgent().replace(/\s(?:Electron|nido|Nido)\/\S+/g, ''))
   handleMediaProtocol()
+  setupTray(() => mainWindow)
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

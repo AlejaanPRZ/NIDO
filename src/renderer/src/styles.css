@@ -5805,3 +5805,155 @@ input.switch:checked {
   font-weight: 400;
   line-height: 1.4;
 }
+
+/* ---------- Mascota: braco de Weimar en pixel art que pasea por el borde inferior ---------- */
+:root[data-mascot='on'] .board-scroll {
+  padding-bottom: 76px;
+}
+.mascot {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 60px;
+  z-index: 45; /* sobre los widgets, bajo el ampliado, menús y ventanas */
+  pointer-events: none;
+}
+.mascot-dog {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  will-change: transform;
+}
+.mascot-dog canvas {
+  position: relative;
+  z-index: 1;
+  display: block;
+  image-rendering: pixelated;
+  pointer-events: auto;
+  cursor: pointer;
+  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.35));
+}
+.mascot-shadow {
+  position: absolute;
+  left: 22px;
+  right: 16px;
+  bottom: -2px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.16);
+  filter: blur(1px);
+}
+.mascot-bubble {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 3px 8px;
+  border-radius: 9px;
+  background: var(--glass-strong);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: mascot-pop 1.4s var(--ease) both;
+}
+@keyframes mascot-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.8);
+  }
+  15%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.mascot-zzz {
+  position: absolute;
+  bottom: 40px;
+  right: -8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  color: var(--muted);
+  font-weight: 800;
+  font-style: normal;
+}
+.mascot-zzz i {
+  font-style: normal;
+  font-size: 9px;
+  animation: mascot-zzz 2.4s ease-in-out infinite;
+}
+.mascot-zzz i:nth-child(2) {
+  font-size: 11px;
+  animation-delay: 0.4s;
+}
+.mascot-zzz i:nth-child(3) {
+  font-size: 13px;
+  animation-delay: 0.8s;
+}
+@keyframes mascot-zzz {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(2px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+/* Corazones de pixel art: un píxel de 2 px y su forma con box-shadow. */
+.mascot-hearts {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+}
+.mascot-hearts i {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  color: #e5484d;
+  box-shadow:
+    2px 0, 4px 0, 8px 0, 10px 0,
+    0 2px, 2px 2px, 4px 2px, 6px 2px, 8px 2px, 10px 2px, 12px 2px,
+    0 4px, 2px 4px, 4px 4px, 6px 4px, 8px 4px, 10px 4px, 12px 4px,
+    2px 6px, 4px 6px, 6px 6px, 8px 6px, 10px 6px,
+    4px 8px, 6px 8px, 8px 8px,
+    6px 10px;
+  animation: mascot-heart 1.8s ease-out both;
+}
+.mascot-hearts i:nth-child(1) {
+  left: -16px;
+}
+.mascot-hearts i:nth-child(2) {
+  left: -4px;
+  bottom: 6px;
+  animation-delay: 0.2s;
+  scale: 0.75;
+}
+.mascot-hearts i:nth-child(3) {
+  left: 8px;
+  animation-delay: 0.4s;
+  scale: 0.6;
+}
+@keyframes mascot-heart {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+}

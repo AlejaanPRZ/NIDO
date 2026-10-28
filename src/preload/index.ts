@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, MEDIA_SCHEME, type NidoApi, type NowPlayingApi, type NowPlayingState } from '../shared/types'
+import { IPC, MEDIA_SCHEME, type NidoApi, type NowPlayingApi, type NowPlayingState, type UpdateStatus } from '../shared/types'
 
 // Varios widgets pueden suscribirse a la vez: aquí se reparte un único canal
 // IPC entre todos y se guarda lo último recibido para quien llegue después.
@@ -60,7 +60,15 @@ const api: NidoApi = {
   data: invokers<NidoApi['data']>(IPC.data),
   files: invokers<NidoApi['files']>(IPC.files),
   info: invokers<NidoApi['info']>(IPC.info),
-  system: invokers<NidoApi['system']>(IPC.system)
+  system: invokers<NidoApi['system']>(IPC.system),
+  app: {
+    ...invokers<Omit<NidoApi['app'], 'onUpdate'>>(IPC.app),
+    onUpdate(listener) {
+      const handler = (_e: unknown, status: UpdateStatus): void => listener(status)
+      ipcRenderer.on(IPC.updateEvent, handler)
+      return () => ipcRenderer.off(IPC.updateEvent, handler)
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('nido', api)

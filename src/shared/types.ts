@@ -337,6 +337,12 @@ export interface Settings {
   palette: Palette
   /** Los degradados del fondo se mueven despacio */
   animatedBackground: boolean
+  /** Mascota (un braco en pixel art) paseando por el borde inferior */
+  mascot: boolean
+  /** Al cerrar la ventana, Nido sigue en la bandeja del sistema */
+  closeToTray: boolean
+  /** Atajo global para mostrar u ocultar Nido (acelerador de Electron); '' = sin atajo */
+  globalShortcut: string
   locked: boolean
   reduceTransparency: boolean
   /** Intensidad del cristal (0–100): translucidez y desenfoque de las superficies */
@@ -746,6 +752,38 @@ export interface SystemStats {
 }
 
 /** API expuesta al renderer a través de contextBridge como `window.nido`. */
+// ---------- App: bandeja, atajo global y actualizaciones ----------
+
+export interface AppBehavior {
+  closeToTray: boolean
+  shortcut: string
+}
+
+export interface UpdateStatus {
+  /** Versión instalada */
+  current: string
+  /**
+   * unavailable: esta copia no tiene actualizaciones configuradas (desarrollo o sin publicar);
+   * ready: descargada, se instala al reiniciar.
+   */
+  state: 'unavailable' | 'idle' | 'checking' | 'uptodate' | 'downloading' | 'ready' | 'error'
+  version?: string
+  /** 0–100 mientras se descarga */
+  progress?: number
+  message?: string
+  checkedAt?: number
+}
+
+export interface AppApi {
+  /** Aplica el comportamiento de la ventana; shortcutOk es false si otra app ya usa el atajo */
+  setBehavior(behavior: AppBehavior): Promise<{ shortcutOk: boolean }>
+  updateStatus(): Promise<UpdateStatus>
+  checkUpdates(): Promise<UpdateStatus>
+  /** Cierra Nido, instala la actualización descargada y lo vuelve a abrir */
+  installUpdate(): Promise<void>
+  onUpdate(listener: (status: UpdateStatus) => void): () => void
+}
+
 export interface NidoApi {
   /** Estado tal cual está en disco (v1 o v2); el renderer lo migra. */
   loadState(): Promise<unknown>
@@ -764,9 +802,17 @@ export interface NidoApi {
   files: FilesApi
   info: InfoApi
   system: { stats(): Promise<Result<SystemStats>> }
+  app: AppApi
 }
 
 export const IPC = {
+  app: {
+    setBehavior: 'nido:app:behavior',
+    updateStatus: 'nido:app:update-status',
+    checkUpdates: 'nido:app:check-updates',
+    installUpdate: 'nido:app:install-update'
+  },
+  updateEvent: 'nido:app:update-event',
   loadState: 'nido:load-state',
   saveState: 'nido:save-state',
   saveStateSync: 'nido:save-state-sync',

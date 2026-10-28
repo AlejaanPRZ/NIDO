@@ -5,6 +5,7 @@ import { CatalogDialog } from './CatalogDialog'
 import { CommandPalette } from './CommandPalette'
 import { AppContext, useBrowsers, WorkspaceActiveContext, type AppContextValue, type SettingsSection } from './context'
 import { Icon } from './icons'
+import { Mascot } from './mascot/Mascot'
 import { COLLAPSED_H, WIDGETS } from './registry'
 import { SettingsDialog } from './Settings'
 import { resolveMove } from './layoutEngine'
@@ -481,7 +482,25 @@ export default function App(): JSX.Element {
     if (settings.palette === 'nido') delete root.dataset.palette
     else root.dataset.palette = settings.palette
     root.dataset.bgMotion = settings.animatedBackground ? 'on' : 'off'
-  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion, settings.glass, settings.palette, settings.animatedBackground])
+    root.dataset.mascot = settings.mascot ? 'on' : 'off'
+  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion, settings.glass, settings.palette, settings.animatedBackground, settings.mascot])
+
+  // Bandeja y atajo global (proceso principal). Si otra app ya usa el atajo, se avisa una vez.
+  useEffect(() => {
+    if (!ready) return
+    void window.nido.app.setBehavior({ closeToTray: settings.closeToTray, shortcut: settings.globalShortcut }).then((r) => {
+      if (!r.shortcutOk && settings.globalShortcut) toast(`No se pudo usar el atajo ${settings.globalShortcut.replace('Control', 'Ctrl')}: otra aplicación ya lo usa. Elige otro en Ajustes → General.`, 'error')
+    })
+  }, [ready, settings.closeToTray, settings.globalShortcut])
+
+  // Actualización descargada: se ofrece reiniciar.
+  useEffect(
+    () =>
+      window.nido.app.onUpdate((s) => {
+        if (s.state === 'ready') toast(`Nido ${s.version} está listo para instalarse.`, 'info', { label: 'Reiniciar', run: () => void window.nido.app.installUpdate() })
+      }),
+    []
+  )
 
   // Al cambiar de espacio se cierra el widget ampliado.
   useEffect(() => setExpanded(null), [state.activeWorkspace])
@@ -601,6 +620,7 @@ export default function App(): JSX.Element {
         style={{ '--ws-color': activeWs?.color } as CSSProperties}
       >
         <div className="wallpaper" aria-hidden />
+        {settings.mascot && <Mascot reduceMotion={settings.reduceMotion} />}
         <Topbar
           state={state}
           onSearch={() => setPaletteOpen(true)}

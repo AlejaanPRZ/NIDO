@@ -367,7 +367,7 @@ export function parseNotionId(link: string): string | null {
 }
 
 /** «Comprobar enlace»: acepta el de una base de datos (o el ID de una fuente de datos) y comprueba que se lee. */
-async function resolve(link: string): Promise<NotionLinkCheck> {
+export async function resolve(link: string): Promise<NotionLinkCheck> {
   const id = parseNotionId(link)
   if (!id) throw new NidoError('invalid', 'Eso no parece un enlace de Notion. En Notion, abre la base de datos como página completa → ••• → Copiar enlace.')
   // Errores que significan «no es de este tipo o no hay acceso»: se prueba el siguiente tipo.
@@ -467,7 +467,7 @@ const toTodo = (block: any, depth: number, section?: string): NotionTodo => ({
  * bloques con hijos (casillas con subtareas, desplegables, columnas, callouts, bloques sincronizados…).
  * No se entra en subpáginas ni en bases de datos, que son contenido aparte.
  */
-async function pageTodos(pageId: string, known?: any): Promise<NotionPageTodos> {
+export async function pageTodos(pageId: string, known?: any): Promise<NotionPageTodos> {
   let page = known
   if (!page) {
     try {
@@ -515,7 +515,7 @@ async function pageTodos(pageId: string, known?: any): Promise<NotionPageTodos> 
 }
 
 /** Marca o desmarca una casilla. Solo se envía `checked`: Notion conserva el texto, el color y los hijos. */
-async function setTodo(blockId: string, checked: boolean, before?: boolean): Promise<NotionTodo> {
+export async function setTodo(blockId: string, checked: boolean, before?: boolean): Promise<NotionTodo> {
   const path = `/blocks/${encodeURIComponent(blockId)}`
   let current: any
   try {
@@ -552,7 +552,7 @@ async function schema(dataSourceId: string): Promise<NotionSchema> {
   return { id: ds.id, title: plainText(ds.title) || 'Sin título', properties }
 }
 
-function simplify(prop: any): NotionValue | undefined {
+export function simplify(prop: any): NotionValue | undefined {
   switch (prop?.type) {
     case 'title':
       return { type: 'title', value: plainText(prop.title) }
@@ -581,7 +581,7 @@ function toPage(page: any): NotionPage {
 }
 
 /** Compara dos valores simplificados (las fechas, por su día y hora tal como los da Notion). */
-function same(a: NotionValue | undefined, b: NotionValue | undefined): boolean {
+export function same(a: NotionValue | undefined, b: NotionValue | undefined): boolean {
   const norm = (v: NotionValue | undefined): unknown => {
     if (!v) return null
     if (v.type === 'multi_select') return [...v.value].sort()
@@ -592,7 +592,7 @@ function same(a: NotionValue | undefined, b: NotionValue | undefined): boolean {
   return JSON.stringify(norm(a)) === JSON.stringify(norm(b))
 }
 
-function toNotion(values: Record<string, NotionValue>): Record<string, unknown> {
+export function toNotion(values: Record<string, NotionValue>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [name, v] of Object.entries(values)) {
     switch (v.type) {

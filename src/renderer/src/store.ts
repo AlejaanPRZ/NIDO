@@ -108,6 +108,9 @@ export function defaultSettings(): Settings {
     theme: 'system',
     palette: 'nido',
     animatedBackground: false,
+    closeToTray: true,
+    globalShortcut: 'Control+Alt+N',
+    mascot: true,
     locked: false,
     reduceTransparency: false,
     glass: 60,
@@ -205,6 +208,9 @@ function sanitize(raw: any): AppState {
     favorites: Array.isArray(raw.settings?.favorites) ? raw.settings.favorites : [],
     palette: PALETTES.includes(raw.settings?.palette) ? raw.settings.palette : defaults.palette,
     animatedBackground: !!raw.settings?.animatedBackground,
+    mascot: typeof raw.settings?.mascot === 'boolean' ? raw.settings.mascot : defaults.mascot,
+    closeToTray: typeof raw.settings?.closeToTray === 'boolean' ? raw.settings.closeToTray : defaults.closeToTray,
+    globalShortcut: typeof raw.settings?.globalShortcut === 'string' ? raw.settings.globalShortcut : defaults.globalShortcut,
     glass: Number.isFinite(raw.settings?.glass) ? Math.min(100, Math.max(0, Math.round(raw.settings.glass))) : defaults.glass
   }
   const active = workspaces.some((w: Workspace) => w.id === raw.activeWorkspace) ? raw.activeWorkspace : workspaces[0].id
@@ -266,7 +272,7 @@ function sameLayout(a: LayoutItem[], b: LayoutItem[]): boolean {
   })
 }
 
-function reducer(state: AppState, action: Action): AppState {
+export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'hydrate':
       return action.state
