@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react'
+import { BrandLogo, hasBrand } from './BrandLogo'
 import { CATALOG, CATEGORIES, MODE_LABEL, type CatalogCategory, type CatalogEntry } from './catalog'
 import { useApp } from './context'
 import { Icon } from './icons'
@@ -88,9 +89,13 @@ export function CatalogDialog({ onClose, onAdded }: { onClose(): void; onAdded(e
               return (
                 <article key={e.id} className={`catalog-card ${available ? '' : 'soon'}`} style={{ '--tint': e.tint } as CSSProperties}>
                   <header className="card-head">
-                    <span className="card-icon">
-                      <Icon name={e.icon} size={18} />
-                    </span>
+                    {hasBrand(e.brand) ? (
+                      <BrandLogo brand={e.brand} name={e.title} size={38} decorative />
+                    ) : (
+                      <span className="card-icon">
+                        <Icon name={e.icon} size={18} />
+                      </span>
+                    )}
                     <div className="grow">
                       <h3>{e.title}</h3>
                       <div className="badges">

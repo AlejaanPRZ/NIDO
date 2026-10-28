@@ -324,6 +324,8 @@ export interface Settings {
   theme: Theme
   locked: boolean
   reduceTransparency: boolean
+  /** Intensidad del cristal (0–100): translucidez y desenfoque de las superficies */
+  glass: number
   reduceMotion: boolean
   clock: { hour12: boolean; showSeconds: boolean; date: 'long' | 'short' | 'hidden' }
   welcomeSeen: boolean
@@ -349,7 +351,7 @@ export interface ExportFile {
 
 // ---------- Resultado de llamadas al proceso principal ----------
 
-export type ErrorCode = 'config' | 'auth' | 'network' | 'notfound' | 'forbidden' | 'rate' | 'invalid' | 'unknown'
+export type ErrorCode = 'config' | 'auth' | 'cancelled' | 'network' | 'notfound' | 'forbidden' | 'rate' | 'invalid' | 'unknown'
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string; code: ErrorCode }
 
@@ -402,6 +404,9 @@ export interface NowPlayingApi {
 // ---------- Google Calendar ----------
 
 export interface GoogleStatus {
+  /** Esta copia de Nido trae su propio cliente OAuth (nido.oauth.json): basta con «Conectar con Google» */
+  builtIn: boolean
+  /** ID de un cliente propio del usuario (opciones avanzadas); vacío si usa el integrado */
   clientId: string
   hasClientSecret: boolean
   connected: boolean
@@ -468,7 +473,11 @@ export interface GoogleEventsResult {
 export interface GoogleApi {
   status(): Promise<Result<GoogleStatus>>
   setCredentials(clientId: string, clientSecret: string): Promise<Result<GoogleStatus>>
+  /** Borra el cliente propio y vuelve al integrado (si lo hay) */
+  clearCredentials(): Promise<Result<GoogleStatus>>
   connect(): Promise<Result<GoogleStatus>>
+  /** Cancela la espera de la autorización en el navegador */
+  cancel(): Promise<Result<null>>
   disconnect(): Promise<Result<GoogleStatus>>
   calendars(): Promise<Result<GoogleCalendar[]>>
   events(query: GoogleEventsQuery): Promise<Result<GoogleEventsResult>>
@@ -480,7 +489,11 @@ export interface GoogleApi {
 // ---------- Notion ----------
 
 export interface NotionStatus {
+  /** Esta copia de Nido tiene configurado el OAuth público de Notion (cliente + intercambiador) */
+  oauth: boolean
   connected: boolean
+  /** Cómo se conectó: autorización oficial de Notion o token de integración interna */
+  method?: 'oauth' | 'internal'
   /** Notion rechazó el token guardado */
   expired: boolean
   workspace?: string
@@ -523,6 +536,9 @@ export interface NotionPage {
 
 export interface NotionApi {
   status(): Promise<Result<NotionStatus>>
+  /** Autorización oficial en el navegador (elige espacio y páginas en Notion) */
+  connect(): Promise<Result<NotionStatus>>
+  cancel(): Promise<Result<null>>
   setToken(token: string): Promise<Result<NotionStatus>>
   disconnect(): Promise<Result<NotionStatus>>
   search(query: string): Promise<Result<NotionSource[]>>
@@ -676,7 +692,9 @@ export const IPC = {
   google: {
     status: 'nido:google:status',
     setCredentials: 'nido:google:set-credentials',
+    clearCredentials: 'nido:google:clear-credentials',
     connect: 'nido:google:connect',
+    cancel: 'nido:google:cancel',
     disconnect: 'nido:google:disconnect',
     calendars: 'nido:google:calendars',
     events: 'nido:google:events',
@@ -686,6 +704,8 @@ export const IPC = {
   },
   notion: {
     status: 'nido:notion:status',
+    connect: 'nido:notion:connect',
+    cancel: 'nido:notion:cancel',
     setToken: 'nido:notion:set-token',
     disconnect: 'nido:notion:disconnect',
     search: 'nido:notion:search',

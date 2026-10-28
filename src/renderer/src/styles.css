@@ -1,51 +1,62 @@
 /*
  * Nido · sistema visual inspirado en Apple / Liquid Glass.
- * Fondo neutro con un velo de color muy suave, cristal (desenfoque) solo en
- * la barra superior, menús y ventanas; los widgets usan superficies
- * semiopacas sin backdrop-filter, que es lo que más cuesta al componer muchas
- * tarjetas. Bordes finos, reflejo superior discreto y sombras suaves.
+ * Fondo de azules y celestes con degradados suaves; encima, cristal translúcido con
+ * desenfoque, bordes blancos finos y un reflejo superior. La intensidad del cristal
+ * (--glass-k, 0–1, Ajustes → General) regula a la vez translucidez y desenfoque.
+ * El texto nunca se desenfoca: solo se desenfoca lo que hay detrás de cada superficie.
+ * Mientras se arrastra, los widgets dejan de desenfocar para que el movimiento sea fluido.
  * Temas claro, oscuro y automático; transparencia y movimiento reducidos.
  */
 
 :root {
   --font: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --base: #eff1f4;
-  --veil-1: rgba(10, 132, 255, 0.07);
-  --veil-2: rgba(175, 82, 222, 0.05);
-  --surface: rgba(255, 255, 255, 0.88);
-  --surface-strong: rgba(255, 255, 255, 0.96);
-  --glass: rgba(250, 251, 253, 0.74);
-  --glass-strong: rgba(251, 252, 254, 0.9);
-  --blur: saturate(170%) blur(22px);
-  --border: rgba(0, 0, 0, 0.07);
-  --border-strong: rgba(0, 0, 0, 0.12);
-  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 6px 18px -8px rgba(16, 24, 40, 0.14);
-  --shadow-lg: 0 2px 6px rgba(16, 24, 40, 0.06), 0 24px 60px -18px rgba(16, 24, 40, 0.3);
-  --text: #1d1d1f;
-  --text-2: #3c3c43;
-  --muted: #636368;
-  --soft: #8e8e93;
-  --fill: rgba(118, 118, 128, 0.1);
-  --fill-2: rgba(118, 118, 128, 0.18);
-  --hover: rgba(118, 118, 128, 0.09);
-  --separator: rgba(60, 60, 67, 0.12);
-  --btn: #ffffff;
+  --glass-k: 0.6;
+  --base: #e6eef9;
+  --veil-1: rgba(58, 145, 255, 0.34);
+  --veil-2: rgba(96, 205, 255, 0.36);
+  --veil-3: rgba(255, 255, 255, 0.85);
+  --veil-4: rgba(120, 160, 255, 0.22);
+  --surface: rgb(255 255 255 / calc(0.9 - var(--glass-k) * 0.32));
+  --surface-strong: rgb(255 255 255 / calc(0.97 - var(--glass-k) * 0.15));
+  --glass: rgb(250 252 255 / calc(0.84 - var(--glass-k) * 0.26));
+  --glass-strong: rgb(251 253 255 / calc(0.95 - var(--glass-k) * 0.14));
+  --blur: saturate(180%) blur(calc(10px + var(--glass-k) * 20px));
+  --widget-blur: saturate(160%) blur(calc(var(--glass-k) * 20px));
+  --border: rgba(255, 255, 255, 0.72);
+  --border-strong: rgba(40, 80, 150, 0.16);
+  --edge: 0 0 0 0.5px rgba(30, 70, 140, 0.12);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 52px);
+  --sheen-opacity: 0.75;
+  --shadow: 0 1px 2px rgba(20, 50, 110, 0.06), 0 12px 30px -14px rgba(25, 70, 150, 0.26);
+  --shadow-lg: 0 2px 8px rgba(20, 50, 110, 0.08), 0 30px 70px -22px rgba(25, 70, 150, 0.38);
+  --text: #16181d;
+  --text-2: #353a44;
+  --muted: #586273;
+  --soft: #808a9a;
+  --fill: rgba(60, 100, 170, 0.09);
+  --fill-2: rgba(60, 100, 170, 0.16);
+  --hover: rgba(60, 100, 170, 0.08);
+  --separator: rgba(40, 70, 130, 0.12);
+  --btn: rgb(255 255 255 / calc(0.92 - var(--glass-k) * 0.2));
   --seg-active: #ffffff;
   --accent: #007aff;
+  --accent-2: #36b6f0;
+  --accent-grad: linear-gradient(180deg, #3c9bff, #0a72f2);
   --accent-text: #ffffff;
   --accent-soft: rgba(0, 122, 255, 0.12);
-  --accent-ink: #0062cc;
+  --accent-ink: #005fcc;
   --danger: #d70015;
   --success: #248a3d;
   --warning: #b25000;
-  --scrim: rgba(17, 24, 39, 0.22);
-  --guide: rgba(0, 122, 255, 0.06);
-  --guide-row: rgba(0, 122, 255, 0.035);
-  --r-xl: 22px;
-  --r-lg: 18px;
-  --r-md: 12px;
-  --r-sm: 9px;
+  --scrim: rgba(15, 30, 60, 0.24);
+  --guide: rgba(0, 122, 255, 0.07);
+  --guide-row: rgba(0, 122, 255, 0.04);
+  --tile: #ffffff;
+  --r-xl: 24px;
+  --r-lg: 20px;
+  --r-md: 13px;
+  --r-sm: 10px;
   --r-xs: 7px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 130ms;
@@ -54,97 +65,122 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --base: #111216;
-    --veil-1: rgba(10, 132, 255, 0.1);
-    --veil-2: rgba(175, 82, 222, 0.07);
-    --surface: rgba(30, 31, 36, 0.9);
-    --surface-strong: rgba(36, 37, 43, 0.97);
-    --glass: rgba(30, 31, 36, 0.72);
-    --glass-strong: rgba(34, 35, 41, 0.92);
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 22px -10px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.45), 0 28px 70px -20px rgba(0, 0, 0, 0.7);
-    --text: #f5f5f7;
-    --text-2: #dcdce1;
-    --muted: #a6a6ad;
-    --soft: #8e8e93;
-    --fill: rgba(118, 118, 128, 0.22);
-    --fill-2: rgba(118, 118, 128, 0.32);
-    --hover: rgba(255, 255, 255, 0.06);
-    --separator: rgba(255, 255, 255, 0.09);
-    --btn: rgba(255, 255, 255, 0.09);
-    --seg-active: rgba(255, 255, 255, 0.18);
+    --base: #08101f;
+    --veil-1: rgba(40, 110, 255, 0.34);
+    --veil-2: rgba(30, 175, 240, 0.22);
+    --veil-3: rgba(90, 140, 255, 0.1);
+    --veil-4: rgba(80, 90, 230, 0.2);
+    --surface: rgb(26 36 56 / calc(0.9 - var(--glass-k) * 0.3));
+    --surface-strong: rgb(30 40 62 / calc(0.97 - var(--glass-k) * 0.14));
+    --glass: rgb(22 32 52 / calc(0.84 - var(--glass-k) * 0.24));
+    --glass-strong: rgb(26 36 58 / calc(0.95 - var(--glass-k) * 0.12));
+    --border: rgba(255, 255, 255, 0.13);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --edge: 0 0 0 0.5px rgba(0, 0, 0, 0.4);
+    --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 52px);
+    --sheen-opacity: 1;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 26px -12px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.45), 0 28px 70px -20px rgba(0, 0, 0, 0.75);
+    --text: #f3f6fb;
+    --text-2: #d9dfea;
+    --muted: #a3adbf;
+    --soft: #7f8a9e;
+    --fill: rgba(140, 170, 230, 0.14);
+    --fill-2: rgba(140, 170, 230, 0.24);
+    --hover: rgba(255, 255, 255, 0.07);
+    --separator: rgba(255, 255, 255, 0.1);
+    --btn: rgba(255, 255, 255, 0.1);
+    --seg-active: rgba(255, 255, 255, 0.2);
     --accent: #0a84ff;
-    --accent-soft: rgba(10, 132, 255, 0.2);
-    --accent-ink: #5ea9ff;
+    --accent-2: #4cc3ff;
+    --accent-grad: linear-gradient(180deg, #2f97ff, #0a6fe8);
+    --accent-soft: rgba(10, 132, 255, 0.22);
+    --accent-ink: #6cb3ff;
     --danger: #ff6961;
     --success: #4cd964;
     --warning: #ffb340;
     --scrim: rgba(0, 0, 0, 0.5);
-    --guide: rgba(10, 132, 255, 0.1);
+    --guide: rgba(10, 132, 255, 0.11);
     --guide-row: rgba(10, 132, 255, 0.05);
+    --tile: #f4f7fc;
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --base: #111216;
-  --veil-1: rgba(10, 132, 255, 0.1);
-  --veil-2: rgba(175, 82, 222, 0.07);
-  --surface: rgba(30, 31, 36, 0.9);
-  --surface-strong: rgba(36, 37, 43, 0.97);
-  --glass: rgba(30, 31, 36, 0.72);
-  --glass-strong: rgba(34, 35, 41, 0.92);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 22px -10px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.45), 0 28px 70px -20px rgba(0, 0, 0, 0.7);
-  --text: #f5f5f7;
-  --text-2: #dcdce1;
-  --muted: #a6a6ad;
-  --soft: #8e8e93;
-  --fill: rgba(118, 118, 128, 0.22);
-  --fill-2: rgba(118, 118, 128, 0.32);
-  --hover: rgba(255, 255, 255, 0.06);
-  --separator: rgba(255, 255, 255, 0.09);
-  --btn: rgba(255, 255, 255, 0.09);
-  --seg-active: rgba(255, 255, 255, 0.18);
+  --base: #08101f;
+  --veil-1: rgba(40, 110, 255, 0.34);
+  --veil-2: rgba(30, 175, 240, 0.22);
+  --veil-3: rgba(90, 140, 255, 0.1);
+  --veil-4: rgba(80, 90, 230, 0.2);
+  --surface: rgb(26 36 56 / calc(0.9 - var(--glass-k) * 0.3));
+  --surface-strong: rgb(30 40 62 / calc(0.97 - var(--glass-k) * 0.14));
+  --glass: rgb(22 32 52 / calc(0.84 - var(--glass-k) * 0.24));
+  --glass-strong: rgb(26 36 58 / calc(0.95 - var(--glass-k) * 0.12));
+  --border: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --edge: 0 0 0 0.5px rgba(0, 0, 0, 0.4);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 52px);
+  --sheen-opacity: 1;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 26px -12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.45), 0 28px 70px -20px rgba(0, 0, 0, 0.75);
+  --text: #f3f6fb;
+  --text-2: #d9dfea;
+  --muted: #a3adbf;
+  --soft: #7f8a9e;
+  --fill: rgba(140, 170, 230, 0.14);
+  --fill-2: rgba(140, 170, 230, 0.24);
+  --hover: rgba(255, 255, 255, 0.07);
+  --separator: rgba(255, 255, 255, 0.1);
+  --btn: rgba(255, 255, 255, 0.1);
+  --seg-active: rgba(255, 255, 255, 0.2);
   --accent: #0a84ff;
-  --accent-soft: rgba(10, 132, 255, 0.2);
-  --accent-ink: #5ea9ff;
+  --accent-2: #4cc3ff;
+  --accent-grad: linear-gradient(180deg, #2f97ff, #0a6fe8);
+  --accent-soft: rgba(10, 132, 255, 0.22);
+  --accent-ink: #6cb3ff;
   --danger: #ff6961;
   --success: #4cd964;
   --warning: #ffb340;
   --scrim: rgba(0, 0, 0, 0.5);
-  --guide: rgba(10, 132, 255, 0.1);
+  --guide: rgba(10, 132, 255, 0.11);
   --guide-row: rgba(10, 132, 255, 0.05);
+  --tile: #f4f7fc;
   color-scheme: dark;
 }
 
-/* Transparencia reducida: superficies opacas, sin desenfoque ni velo de color. */
+/* Transparencia reducida: superficies opacas, sin desenfoque ni reflejos; fondo liso. */
 :root[data-transparency='reduced'] {
   --surface: var(--solid, #ffffff);
   --surface-strong: var(--solid, #ffffff);
   --glass: var(--solid, #ffffff);
   --glass-strong: var(--solid, #ffffff);
+  --btn: var(--solid-2, #f3f6fa);
   --blur: none;
+  --widget-blur: none;
+  --sheen-opacity: 0;
+  --border: var(--border-strong);
   --veil-1: transparent;
   --veil-2: transparent;
+  --veil-3: transparent;
+  --veil-4: transparent;
 }
 :root[data-transparency='reduced'][data-theme='dark'] {
-  --solid: #1d1e23;
+  --solid: #18202e;
+  --solid-2: #222b3b;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-transparency='reduced']:not([data-theme='light']) {
-    --solid: #1d1e23;
+    --solid: #18202e;
+    --solid-2: #222b3b;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
   :root {
     --blur: none;
+    --widget-blur: none;
   }
 }
 
@@ -276,7 +312,7 @@ code {
 
 /* ---------- Superficies ---------- */
 
-/* Cristal real (con desenfoque): solo barra superior, menús, avisos y ventanas. */
+/* Cristal de barra superior, menús, avisos y ventanas. */
 .glass-bar,
 .glass-strong {
   background: var(--glass);
@@ -285,6 +321,7 @@ code {
   border: 1px solid var(--border);
   box-shadow:
     var(--highlight),
+    var(--edge),
     var(--shadow);
 }
 
@@ -292,17 +329,28 @@ code {
   background: var(--glass-strong);
   box-shadow:
     var(--highlight),
+    var(--edge),
     var(--shadow-lg);
 }
 
-/* Widgets: superficie semiopaca sin desenfoque (rápida aunque haya muchos). */
+/* Widgets: cristal con un desenfoque más ligero. Al arrastrar o redimensionar se quita
+   (el fondo sigue translúcido) para que mover widgets no cueste fotogramas. */
 .glass {
   position: relative;
   background: var(--surface);
+  -webkit-backdrop-filter: var(--widget-blur);
+  backdrop-filter: var(--widget-blur);
   border: 1px solid var(--border);
   box-shadow:
     var(--highlight),
+    var(--edge),
     var(--shadow);
+}
+
+.is-interacting .glass,
+.is-pointer-drag .glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ---------- Estructura ---------- */
@@ -319,8 +367,11 @@ code {
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(70% 60% at 0% 0%, var(--veil-1), transparent 70%),
-    radial-gradient(60% 60% at 100% 100%, var(--veil-2), transparent 70%),
+    radial-gradient(55% 50% at 8% 0%, var(--veil-1), transparent 72%),
+    radial-gradient(50% 45% at 92% 6%, var(--veil-2), transparent 70%),
+    radial-gradient(60% 50% at 50% 55%, var(--veil-3), transparent 75%),
+    radial-gradient(55% 55% at 96% 100%, var(--veil-4), transparent 70%),
+    radial-gradient(50% 50% at 0% 100%, var(--veil-2), transparent 70%),
     var(--base);
 }
 
@@ -564,8 +615,16 @@ code {
 
 @media (max-width: 1100px) {
   .search-label,
-  .search-btn kbd {
+  .search-btn kbd,
+  .clock-date {
     display: none;
+  }
+  /* Pestañas: solo el espacio activo conserva el nombre; los demás, su icono (con tooltip). */
+  .ws-tab:not(.active) .ws-name {
+    display: none;
+  }
+  .ws-tab:not(.active) {
+    padding: 0 4px;
   }
 }
 
@@ -632,13 +691,17 @@ code {
 }
 
 .btn.primary {
-  background: var(--accent);
+  background: var(--accent-grad);
   color: var(--accent-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 1px 2px rgba(0, 60, 160, 0.2),
+    0 6px 14px -6px rgba(0, 110, 255, 0.55);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, #000);
+  background: var(--accent-grad);
+  filter: brightness(1.06);
 }
 
 .btn.danger {
@@ -1196,9 +1259,11 @@ input.switch:checked {
   z-index: 10;
 }
 
+/* Dónde quedará el widget al soltarlo. */
 .react-grid-item.react-grid-placeholder {
-  background: var(--accent);
-  opacity: 0.16;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  opacity: 1;
   border-radius: var(--r-lg);
   transition: all 120ms var(--ease);
 }
@@ -1232,11 +1297,14 @@ input.switch:checked {
 }
 
 .is-interacting webview,
-.is-interacting iframe {
+.is-interacting iframe,
+.is-pointer-drag webview,
+.is-pointer-drag iframe {
   pointer-events: none;
 }
 
-.is-interacting {
+.is-interacting,
+.is-pointer-drag {
   user-select: none;
 }
 
@@ -1249,25 +1317,15 @@ input.switch:checked {
   transition: box-shadow 200ms var(--ease);
 }
 
-/* Reflejo superior discreto, como el borde iluminado del cristal. */
+/* Reflejo superior, como el borde iluminado del cristal (no tapa ni desenfoca el contenido). */
 .widget::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 60px);
-  opacity: 0.6;
+  background: var(--sheen);
+  opacity: var(--sheen-opacity);
   pointer-events: none;
-}
-
-:root[data-theme='dark'] .widget::before {
-  opacity: 0.05;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .widget::before {
-    opacity: 0.05;
-  }
 }
 
 .react-draggable-dragging .widget {
@@ -1445,7 +1503,9 @@ input.switch:checked {
   display: flex;
   flex-direction: column;
   padding: 0 14px 12px;
-  container-type: inline-size;
+  /* Contenedor de ancho y alto: cada widget se adapta a su espacio real con @container
+     (ancho y alto del cuerpo), no al tamaño de la ventana. */
+  container-type: size;
 }
 
 .widget-body[hidden] {
@@ -2922,6 +2982,20 @@ input.switch:checked {
   overflow-y: auto;
 }
 
+/* Reproductor local: sin scroll anidado. Solo la cola se desplaza y la barra de añadir queda fija. */
+.local-player {
+  overflow: hidden;
+}
+
+.local-player .playlist {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.local-player .widget-footer {
+  flex-shrink: 0;
+}
+
 .player {
   display: flex;
   flex-direction: column;
@@ -3043,8 +3117,8 @@ input.switch:checked {
 }
 
 .time-btn {
-  padding: 2px 6px;
-  margin-left: -6px;
+  padding: 2px 4px;
+  margin-left: 0;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -4058,9 +4132,13 @@ input.switch:checked {
 .zone-meta {
   font-size: 11.5px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .zone-time {
+  flex-shrink: 0;
   font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -4692,9 +4770,18 @@ input.switch:checked {
   }
 }
 
-@container (max-width: 380px) {
-  .cal-toolbar .btn.tiny {
-    display: none;
+/* Calendario estrecho: la barra pasa a dos filas (navegación arriba, vistas y acciones abajo). */
+@container (max-width: 420px) {
+  .cal-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .cal-toolbar > .grow {
+    flex-basis: 100%;
+    height: 0;
+  }
+  .cal-title {
+    flex: 1 1 auto;
   }
 }
 
@@ -4800,5 +4887,251 @@ input.switch:checked {
   }
   .explain {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Logos de marca ---------- */
+
+/* Placa clara común: los logos oficiales se ven con sus colores en ambos temas y ocupan
+   el mismo tamaño visual sin estirarse ni recortarse. */
+.brand-tile {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 26%;
+  background: var(--tile);
+  box-shadow:
+    0 0 0 0.5px rgba(20, 50, 100, 0.14),
+    0 1px 2px rgba(20, 50, 100, 0.1);
+  overflow: hidden;
+}
+
+.brand-tile img {
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+.brand-tile.generic {
+  background: var(--fill);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+/* Dentro de un botón «Conectar con…»: sin placa, el botón ya es claro. */
+.brand-tile.bare {
+  background: transparent;
+  box-shadow: none;
+}
+
+.brand-tile.bare img {
+  width: 82%;
+  height: 82%;
+}
+
+.widget-brand {
+  width: 26px;
+  height: 26px;
+}
+
+.chip .brand-tile,
+.app-badge .brand-tile,
+.soon-chip .brand-tile {
+  box-shadow: 0 0 0 0.5px rgba(20, 50, 100, 0.14);
+}
+
+.radio-row .brand-tile {
+  margin-inline: 2px 4px;
+}
+
+/* ---------- Inicio de sesión en servicios ---------- */
+
+.signin-card {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 18px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--highlight), var(--edge);
+}
+
+.signin-card p {
+  margin: 0;
+  max-width: 60ch;
+}
+
+/* Botón claro con el logo del servicio, como los de «Continuar con…» oficiales. */
+.btn.signin {
+  height: 40px;
+  padding: 0 18px 0 12px;
+  gap: 10px;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btn.signin:hover:not(:disabled) {
+  background: #f6f8fb;
+}
+
+.waiting-browser {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.waiting-browser p {
+  margin: 0;
+}
+
+.calendar-list {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.calendar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-xs);
+}
+
+.calendar-row:hover {
+  background: var(--hover);
+}
+
+.cal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stepper.compact {
+  margin: 4px 0 8px;
+}
+
+.setting-row.is-disabled {
+  opacity: 0.5;
+}
+
+.glass-range {
+  width: 160px;
+}
+
+.glass-value {
+  width: 40px;
+  text-align: right;
+  font-size: 12px;
+}
+
+/* ---------- Adaptación por espacio real del widget ---------- */
+
+/* Pomodoro: el anillo crece o encoge con la altura disponible, sin deformarse. */
+.pomo-ring {
+  width: auto;
+  height: clamp(76px, calc(100cqh - 136px), 168px);
+  max-width: 100%;
+}
+
+/* Temporizador: en estrecho, los preajustes muestran solo el número («1», «5»…) en una fila. */
+@container (max-width: 250px) {
+  .timer-widget .chip .unit {
+    display: none;
+  }
+}
+
+/* Buscador: el motor se reconoce por su logo; el nombre solo aparece si hay sitio. */
+.engine-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 45%;
+}
+
+.engine-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container (max-width: 330px) {
+  .engine-name {
+    display: none;
+  }
+}
+
+/* Estados vacíos en poco alto: se queda lo esencial (título y acción). */
+@container (max-height: 170px) {
+  .empty-state .empty-icon {
+    display: none;
+  }
+}
+
+@container (max-height: 140px) {
+  .empty-state {
+    gap: 4px;
+    padding: 4px;
+  }
+  .empty-state .empty-text {
+    margin: 0 0 2px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+}
+
+@container (max-height: 96px) {
+  .empty-state .empty-text {
+    display: none;
+  }
+}
+
+/* Relojes en estrecho: menos separación y la hora algo menor; quitar va encima al pasar el ratón. */
+@container (max-width: 250px) {
+  .zone {
+    position: relative;
+    gap: 7px;
+  }
+  .zone-time {
+    font-size: 16px;
+  }
+  .zone .hover-only {
+    position: absolute;
+    right: 0;
+    background: var(--surface-strong);
+  }
+}
+
+/* Reproductores bajos: el volumen y las notas pasan a segundo plano para que los controles quepan. */
+@container (max-height: 330px) {
+  .local-player .volume-row,
+  .local-player .player-note {
+    display: none;
   }
 }

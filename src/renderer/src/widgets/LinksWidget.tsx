@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BrandLogo, brandOfBrowser } from '../BrandLogo'
 import type { LinkGroup } from '../../../shared/types'
 import { browserLabel, useApp } from '../context'
 import { Icon } from '../icons'
@@ -71,9 +72,13 @@ export function LinksWidget({ widget, update }: WidgetProps<'links'>): JSX.Eleme
   return (
     <div className="links">
       <div className="links-bar">
-        <span className="links-target" title="Los accesos se abren fuera de Nido">
-          <Icon name="arrowUpRight" size={13} />
-          {browserLabel(effective, browsers)}
+        <span className="links-target" title={`Los enlaces se abren fuera de Nido, en ${browserLabel(effective, browsers)}`}>
+          {brandOfBrowser(browsers.find((b) => b.id === effective)?.name ?? '') ? (
+            <BrandLogo brand={brandOfBrowser(browsers.find((b) => b.id === effective)!.name)!} name="" size={18} decorative />
+          ) : (
+            <Icon name="arrowUpRight" size={13} />
+          )}
+          <span className="ellipsis">{browserLabel(effective, browsers)}</span>
         </span>
         <MenuButton items={browserItems} title="Elegir navegador externo" className="btn tiny">
           Cambiar

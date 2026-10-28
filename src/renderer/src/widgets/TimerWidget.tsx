@@ -102,7 +102,7 @@ export function TimerWidget({ widget, update }: WidgetProps<'timer'>): JSX.Eleme
           <div className="chip-row center">
             {PRESETS.map((s) => (
               <button key={s} className={`chip ${d.duration === s ? 'active' : ''}`} disabled={d.timer.running} onClick={() => setDuration(s)}>
-                {s / 60} min
+                {s / 60}<span className="unit"> min</span>
               </button>
             ))}
           </div>

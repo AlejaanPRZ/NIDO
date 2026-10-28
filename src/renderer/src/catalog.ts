@@ -44,6 +44,8 @@ export interface CatalogEntry {
   description: string
   category: CatalogCategory
   icon: IconName
+  /** Logo oficial del servicio (brands/), si es una marca real; si no, se usa icon */
+  brand?: string
   /** Color del icono en la tarjeta */
   tint: string
   mode: CatalogMode
@@ -125,7 +127,7 @@ export const CATALOG: CatalogEntry[] = [
     tint: '#4285f4',
     mode: 'nativo',
     account: true,
-    setup: 'Necesita un cliente OAuth de Google (asistente en Ajustes → Conexiones).',
+    setup: 'Conecta tu cuenta de Google en Ajustes → Conexiones.',
     status: 'disponible',
     widget: 'calendar',
     data: { source: 'google', view: 'agenda' },
@@ -140,7 +142,7 @@ export const CATALOG: CatalogEntry[] = [
     tint: '#191919',
     mode: 'nativo',
     account: true,
-    setup: 'Necesita un token de integración interna de Notion.',
+    setup: 'Conecta tu cuenta de Notion en Ajustes → Conexiones.',
     status: 'disponible',
     widget: 'tasks',
     data: { source: 'notion' },
@@ -240,4 +242,40 @@ export const CATALOG: CatalogEntry[] = [
   { id: 'system', title: 'Sistema', description: 'Uso de CPU, memoria y batería en tiempo real.', category: 'sistema', icon: 'gauge', tint: C.green, mode: 'local', account: false, note: 'La batería solo aparece en equipos con batería.', status: 'disponible', widget: 'system' }
 ]
 
-export const catalogById = (id: string | undefined): CatalogEntry | undefined => CATALOG.find((e) => e.id === id)
+// Logo oficial de cada entrada que es una marca real (brands/SOURCES.md). Las funciones propias de
+// Nido (notas, calculadora…) siguen con sus iconos.
+const BRAND_BY_ID: Record<string, string> = {
+  'google-calendar': 'google-calendar',
+  'notion-tasks': 'notion',
+  todoist: 'todoist',
+  trello: 'trello',
+  asana: 'asana',
+  clickup: 'clickup',
+  github: 'github',
+  onedrive: 'onedrive',
+  'onedrive-web': 'onedrive',
+  drive: 'google-drive',
+  'drive-web': 'google-drive',
+  dropbox: 'dropbox',
+  obsidian: 'obsidian',
+  youtube: 'youtube',
+  'spotify-web': 'spotify',
+  spotify: 'spotify',
+  gmail: 'gmail',
+  'gmail-native': 'gmail',
+  whatsapp: 'whatsapp',
+  telegram: 'telegram',
+  discord: 'discord',
+  slack: 'slack',
+  'slack-native': 'slack',
+  teams: 'teams',
+  translate: 'google-translate',
+  deepl: 'deepl',
+  chatgpt: 'chatgpt',
+  claude: 'claude',
+  gemini: 'gemini',
+  perplexity: 'perplexity'
+}
+for (const entry of CATALOG) entry.brand ??= BRAND_BY_ID[entry.id]
+
+export const catalogById =(id: string | undefined): CatalogEntry | undefined => CATALOG.find((e) => e.id === id)

@@ -10,11 +10,11 @@ import { NidoError } from './errors'
 const secretsPath = (): string => join(app.getPath('userData'), 'secrets.json')
 const configPath = (): string => join(app.getPath('userData'), 'integrations.json')
 
-export type SecretName = 'google.clientSecret' | 'google.refreshToken' | 'notion.token'
+export type SecretName = 'google.clientSecret' | 'google.refreshToken' | 'notion.token' | 'notion.refreshToken'
 
 export interface IntegrationsConfig {
   google?: { clientId?: string; account?: string; expired?: boolean }
-  notion?: { workspace?: string; bot?: string; expired?: boolean }
+  notion?: { method?: 'oauth' | 'internal'; workspace?: string; bot?: string; expired?: boolean }
   browsers?: { custom?: { id: string; name: string; path: string }[] }
 }
 

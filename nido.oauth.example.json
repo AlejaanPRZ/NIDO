@@ -1,0 +1,10 @@
+{
+  "google": {
+    "clientId": "123456789-xxxxxxxx.apps.googleusercontent.com",
+    "clientSecret": "GOCSPX-xxxxxxxx"
+  },
+  "notion": {
+    "clientId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "brokerUrl": "https://nido-notion-oauth.TU-CUENTA.workers.dev"
+  }
+}

@@ -61,7 +61,7 @@ export const WIDGETS: { [K in WidgetType]: WidgetDefinition<K> } = {
   links: def('Enlaces', 'link', 'Enlaces y grupos que se abren en tu navegador', { w: 3, h: 4 }, { s: { w: 3, h: 5 }, m: { w: 4, h: 7 }, l: { w: 4, h: 10 } }, () => ({
     groups: [{ id: uid(), name: 'Favoritos', links: [] }]
   })),
-  pomodoro: def('Pomodoro', 'timer', 'Bloques de foco y descanso configurables', { w: 2, h: 5 }, { s: { w: 2, h: 5 }, m: { w: 3, h: 6 }, l: { w: 4, h: 8 } }, () => ({
+  pomodoro: def('Pomodoro', 'timer', 'Bloques de foco y descanso configurables', { w: 2, h: 6 }, { s: { w: 2, h: 6 }, m: { w: 3, h: 6 }, l: { w: 4, h: 8 } }, () => ({
     focus: 25,
     short: 5,
     long: 15,
@@ -72,13 +72,13 @@ export const WIDGETS: { [K in WidgetType]: WidgetDefinition<K> } = {
     clock: { running: false, remaining: 25 * 60 },
     completed: { day: today(), count: 0 }
   })),
-  timer: def('Temporizador', 'stopwatch', 'Cuenta atrás y cronómetro con vueltas', { w: 2, h: 5 }, { s: { w: 2, h: 5 }, m: { w: 3, h: 6 }, l: { w: 3, h: 8 } }, () => ({
+  timer: def('Temporizador', 'stopwatch', 'Cuenta atrás y cronómetro con vueltas', { w: 2, h: 6 }, { s: { w: 2, h: 6 }, m: { w: 3, h: 7 }, l: { w: 3, h: 8 } }, () => ({
     mode: 'timer',
     duration: 5 * 60,
     timer: { running: false, remaining: 5 * 60 },
     stopwatch: { running: false, elapsed: 0, laps: [] }
   })),
-  worldclock: def('Relojes del mundo', 'globeClock', 'La hora en varias ciudades', { w: 2, h: 3 }, { s: { w: 3, h: 4 }, m: { w: 4, h: 5 }, l: { w: 6, h: 6 } }, () => ({
+  worldclock: def('Relojes del mundo', 'globeClock', 'La hora en varias ciudades', { w: 2, h: 4 }, { s: { w: 3, h: 4 }, m: { w: 4, h: 5 }, l: { w: 6, h: 6 } }, () => ({
     zones: [
       { id: uid(), label: 'Nueva York', tz: 'America/New_York' },
       { id: uid(), label: 'Londres', tz: 'Europe/London' },
@@ -91,7 +91,7 @@ export const WIDGETS: { [K in WidgetType]: WidgetDefinition<K> } = {
   habits: def('Hábitos', 'flame', 'Seguimiento diario con rachas', { w: 3, h: 4 }, { s: { w: 3, h: 5 }, m: { w: 4, h: 6 }, l: { w: 6, h: 8 } }, () => ({
     habits: []
   })),
-  launcher: def('Aplicaciones y carpetas', 'apps', 'Accesos a programas, carpetas y documentos', { w: 2, h: 3 }, { s: { w: 3, h: 4 }, m: { w: 4, h: 5 }, l: { w: 6, h: 6 } }, () => ({
+  launcher: def('Aplicaciones y carpetas', 'apps', 'Accesos a programas, carpetas y documentos', { w: 2, h: 4 }, { s: { w: 3, h: 4 }, m: { w: 4, h: 5 }, l: { w: 6, h: 6 } }, () => ({
     items: []
   })),
   images: def('Imágenes', 'image', 'Pase de imágenes de tu equipo', { w: 2, h: 4 }, { s: { w: 3, h: 5 }, m: { w: 4, h: 7 }, l: { w: 6, h: 10 } }, () => ({

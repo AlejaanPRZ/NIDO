@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { BrandLogo } from '../../BrandLogo'
 import type { CalEvent, CalendarEvent, CalendarView } from '../../../../shared/types'
 import { publishSearchItems, useApp } from '../../context'
 import { Icon } from '../../icons'
@@ -179,10 +180,10 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
   let body: JSX.Element
   if (source === 'google' && !google.status) {
     body = <EmptyState icon={<Spinner />} title="Comprobando Google Calendar…" />
-  } else if (source === 'google' && !google.status!.clientId) {
+  } else if (source === 'google' && !google.status!.builtIn && !google.status!.clientId) {
     body = (
       <EmptyState
-        icon={<Icon name="calendar" size={18} />}
+        icon={<BrandLogo brand="google-calendar" name="Google Calendar" size={30} decorative />}
         title="Google Calendar sin configurar"
         action={
           <button className="btn primary small" onClick={() => openSettings('conexiones')}>
@@ -190,13 +191,13 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
           </button>
         }
       >
-        Necesitas un ID de cliente de Google. Ajustes → Conexiones te guía paso a paso.
+        Esta copia de Nido no trae la conexión con Google preparada. Ajustes → Conexiones explica cómo usar un cliente propio.
       </EmptyState>
     )
   } else if (source === 'google' && !google.status!.connected) {
     body = (
       <EmptyState
-        icon={<Icon name="calendar" size={18} />}
+        icon={<BrandLogo brand="google-calendar" name="Google Calendar" size={30} decorative />}
         title="Cuenta de Google desconectada"
         action={
           <button className="btn primary small" onClick={() => openSettings('conexiones')}>

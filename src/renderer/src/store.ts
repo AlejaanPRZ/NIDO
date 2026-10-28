@@ -105,6 +105,7 @@ export function defaultSettings(): Settings {
     theme: 'system',
     locked: false,
     reduceTransparency: false,
+    glass: 60,
     reduceMotion: false,
     clock: { hour12, showSeconds: false, date: 'long' },
     welcomeSeen: false,
@@ -174,7 +175,8 @@ function sanitize(raw: any): AppState {
     ...defaults,
     ...raw.settings,
     clock: { ...defaults.clock, ...raw.settings?.clock },
-    favorites: Array.isArray(raw.settings?.favorites) ? raw.settings.favorites : []
+    favorites: Array.isArray(raw.settings?.favorites) ? raw.settings.favorites : [],
+    glass: Number.isFinite(raw.settings?.glass) ? Math.min(100, Math.max(0, Math.round(raw.settings.glass))) : defaults.glass
   }
   const active = workspaces.some((w: Workspace) => w.id === raw.activeWorkspace) ? raw.activeWorkspace : workspaces[0].id
   return { version: 3, workspaces, activeWorkspace: active, settings }

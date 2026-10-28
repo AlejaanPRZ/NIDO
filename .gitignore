@@ -3,3 +3,7 @@ out/
 release/
 *.log
 .DS_Store
+# Clientes OAuth de la copia que se publica (configuración del desarrollador)
+nido.oauth.json
+server/notion-oauth/.wrangler/
+server/notion-oauth/.dev.vars

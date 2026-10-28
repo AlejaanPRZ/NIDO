@@ -67,6 +67,9 @@ export function Topbar({ state, onSearch, onCatalog, onEditWorkspace, onArrange 
                 key={w.id}
                 role="tab"
                 aria-selected={active}
+                aria-label={w.name}
+                // Si no caben todas, la activa se desplaza a la vista.
+                ref={active ? (el) => el?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) : undefined}
                 className={`ws-tab ${active ? 'active' : ''}`}
                 style={{ '--ws': w.color } as CSSProperties}
                 title={`${w.name} · ${w.widgets.length} widget${w.widgets.length === 1 ? '' : 's'}${i < 9 ? ` (Ctrl+${i + 1})` : ''}\nDoble clic o clic derecho para editar`}

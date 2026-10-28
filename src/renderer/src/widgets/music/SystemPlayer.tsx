@@ -3,6 +3,7 @@ import { APP_ID, type MediaRepeat, type MediaSession, type NowPlayingState, type
 import { useActive, useInterval } from '../../context'
 import { Icon } from '../../icons'
 import { EmptyState } from '../../ui/controls'
+import { BrandLogo, brandOfApp } from '../../BrandLogo'
 import { appName, splitArtist } from '../../util'
 import type { WidgetProps } from '../types'
 import { PlayerUI, type Capability } from './PlayerUI'
@@ -119,6 +120,7 @@ export function SystemPlayer({ widget, update }: WidgetProps<'music'>): JSX.Elem
               onClick={() => update({ sessionId: s.id })}
             >
               {s.status === 'Playing' && <span className="live-dot" />}
+              {brandOfApp(s.id) && <BrandLogo brand={brandOfApp(s.id)!} name={appName(s.id)} size={16} decorative />}
               {appName(s.id)}
             </button>
           ))}
@@ -131,6 +133,7 @@ export function SystemPlayer({ widget, update }: WidgetProps<'music'>): JSX.Elem
         badge={
           <span className="app-badge">
             {playing && <span className="live-dot" />}
+            {brandOfApp(session.id) && <BrandLogo brand={brandOfApp(session.id)!} name={app} size={18} decorative />}
             {app}
           </span>
         }

@@ -1,7 +1,5 @@
 import { shell } from 'electron'
 import { createHash, randomBytes } from 'node:crypto'
-import http from 'node:http'
-import type { AddressInfo } from 'node:net'
 import {
   IPC,
   type CalEvent,
@@ -12,12 +10,16 @@ import {
   type GoogleStatus
 } from '../shared/types'
 import { handleResult, NidoError, readJson, serviceUrl } from './errors'
+import { waitForRedirect } from './loopback'
+import { oauthApps } from './oauthApps'
 import { deleteSecret, encryptionAvailable, getConfig, getSecret, setSecret, updateConfig } from './secrets'
 
 // Google Calendar con OAuth 2.0 para apps de escritorio: redirección a
 // http://127.0.0.1:<puerto aleatorio> + PKCE (S256), como indica
 // developers.google.com/identity/protocols/oauth2/native-app.
 // Permisos mínimos: ver la lista de calendarios y gestionar eventos.
+// El cliente OAuth es, por orden: el propio del usuario (opciones avanzadas) o el que trae esta
+// copia de Nido (nido.oauth.json, ver oauthApps.ts). El usuario normal solo pulsa «Conectar».
 
 const AUTH_URL = serviceUrl('NIDO_GOOGLE_AUTH_URL', 'https://accounts.google.com/o/oauth2/v2/auth')
 const TOKEN_URL = serviceUrl('NIDO_GOOGLE_TOKEN_URL', 'https://oauth2.googleapis.com/token')
@@ -31,6 +33,7 @@ const AUTH_TIMEOUT_MS = 5 * 60_000
 
 let accessToken: { value: string; expiresAt: number } | null = null
 let pendingConnect: Promise<GoogleStatus> | null = null
+let cancelPending: (() => void) | null = null
 const calendarColors = new Map<string, string>()
 
 const base64url = (buf: Buffer): string => buf.toString('base64url')
@@ -38,6 +41,7 @@ const base64url = (buf: Buffer): string => buf.toString('base64url')
 async function status(): Promise<GoogleStatus> {
   const config = getConfig().google ?? {}
   return {
+    builtIn: !!oauthApps().google,
     clientId: config.clientId ?? '',
     hasClientSecret: !!(await getSecret('google.clientSecret')),
     connected: !!(await getSecret('google.refreshToken')),
@@ -48,9 +52,21 @@ async function status(): Promise<GoogleStatus> {
 }
 
 async function credentials(): Promise<{ clientId: string; clientSecret: string | null }> {
-  const clientId = getConfig().google?.clientId
-  if (!clientId) throw new NidoError('config', 'Falta el ID de cliente de Google. Configúralo en Ajustes → Conexiones.')
-  return { clientId, clientSecret: await getSecret('google.clientSecret') }
+  const own = getConfig().google?.clientId
+  if (own) return { clientId: own, clientSecret: await getSecret('google.clientSecret') }
+  const builtIn = oauthApps().google
+  if (builtIn) return { clientId: builtIn.clientId, clientSecret: builtIn.clientSecret ?? null }
+  throw new NidoError('config', 'Esta copia de Nido no trae un cliente de Google. Usa uno propio en Opciones avanzadas.')
+}
+
+/** Vuelve al cliente integrado: los tokens del cliente propio dejan de valer. */
+async function clearCredentials(): Promise<GoogleStatus> {
+  if (getConfig().google?.clientId) forgetAccount()
+  deleteSecret('google.clientSecret')
+  updateConfig((c) => {
+    if (c.google) delete c.google.clientId
+  })
+  return status()
 }
 
 async function setCredentials(clientId: string, clientSecret: string): Promise<GoogleStatus> {
@@ -100,51 +116,14 @@ function cached<T>(entry: { at: number; value: Promise<T> } | null | undefined, 
   return entry && Date.now() - entry.at < ttl ? entry.value : null
 }
 
-const PAGE = (title: string, body: string): string => `<!doctype html><html lang="es"><meta charset="utf-8">
-<title>${title}</title><body style="font:16px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f5f5f7;color:#1d1d1f">
-<div style="text-align:center;max-width:420px;padding:32px;border-radius:24px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.08)">
-<h1 style="font-size:22px;margin:0 0 8px">${title}</h1><p style="color:#6e6e73;margin:0">${body}</p></div></body></html>`
-
 /** Abre Google en el navegador del sistema y espera el código en un servidor local de un solo uso. */
 async function authorize(clientId: string): Promise<{ code: string; redirectUri: string; verifier: string }> {
   const verifier = base64url(randomBytes(48))
   const challenge = base64url(createHash('sha256').update(verifier).digest())
   const state = base64url(randomBytes(16))
-
-  const server = http.createServer()
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolve)
-  })
-  const redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-
-  const codePromise = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new NidoError('auth', 'Se agotó el tiempo para autorizar en Google. Vuelve a intentarlo.')),
-      AUTH_TIMEOUT_MS
-    )
-    server.on('request', (req, res) => {
-      const url = new URL(req.url ?? '/', redirectUri)
-      if (url.pathname !== '/') {
-        res.writeHead(404).end()
-        return
-      }
-      const error = url.searchParams.get('error')
-      const code = url.searchParams.get('code')
-      const ok = !error && !!code && url.searchParams.get('state') === state
-      res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(
-        ok
-          ? PAGE('Nido está conectado', 'Ya puedes cerrar esta pestaña y volver a Nido.')
-          : PAGE('No se pudo conectar', 'Vuelve a Nido para intentarlo de nuevo.')
-      )
-      clearTimeout(timer)
-      if (url.searchParams.get('state') !== state) reject(new NidoError('auth', 'Respuesta de Google no válida (state).'))
-      else if (error === 'access_denied') reject(new NidoError('auth', 'Has cancelado el permiso en Google.'))
-      else if (error || !code) reject(new NidoError('auth', `Google devolvió un error: ${error ?? 'sin código'}`))
-      else resolve(code)
-    })
-  })
+  const redirect = await waitForRedirect({ path: '/', state, service: 'Google', timeoutMs: AUTH_TIMEOUT_MS })
+  cancelPending = redirect.cancel
+  const redirectUri = `http://127.0.0.1:${redirect.port}`
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -165,9 +144,13 @@ async function authorize(clientId: string): Promise<{ code: string; redirectUri:
     } else {
       await shell.openExternal(authUrl)
     }
-    return { code: await codePromise, redirectUri, verifier }
+    const result = await redirect.result
+    return { code: result.get('code')!, redirectUri, verifier }
+  } catch (err) {
+    redirect.cancel()
+    throw err
   } finally {
-    server.close()
+    cancelPending = null
   }
 }
 
@@ -383,7 +366,12 @@ export function registerGoogle(): void {
   handleResult(IPC.google.setCredentials, (clientId: string, clientSecret: string) =>
     setCredentials(String(clientId ?? ''), String(clientSecret ?? ''))
   )
+  handleResult(IPC.google.clearCredentials, () => clearCredentials())
   handleResult(IPC.google.connect, () => connect())
+  handleResult(IPC.google.cancel, () => {
+    cancelPending?.()
+    return null
+  })
   handleResult(IPC.google.disconnect, () => disconnect())
   handleResult(IPC.google.calendars, () => {
     const hit = cached(calendarsCache, CALENDARS_TTL)

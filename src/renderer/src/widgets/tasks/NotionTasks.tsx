@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BrandLogo } from '../../BrandLogo'
 import type { NotionSchema, NotionStatus, NotionTaskConfig, NotionValue, TaskFilters } from '../../../../shared/types'
 import { publishSearchItems, useActive, useApp, useInterval } from '../../context'
 import { Icon } from '../../icons'
@@ -50,7 +51,7 @@ export function NotionTasks({ widget, update }: WidgetProps<'tasks'>): JSX.Eleme
   if (!status.connected) {
     return (
       <EmptyState
-        icon={<Icon name="database" size={18} />}
+        icon={<BrandLogo brand="notion" name="Notion" size={30} decorative />}
         title="Notion sin conectar"
         action={
           <button className="btn primary small" onClick={() => openSettings('conexiones')}>
@@ -58,7 +59,7 @@ export function NotionTasks({ widget, update }: WidgetProps<'tasks'>): JSX.Eleme
           </button>
         }
       >
-        Conecta una integración de Notion para usar una base de datos como lista de tareas.
+        Conecta tu cuenta de Notion para usar una base de datos como lista de tareas.
       </EmptyState>
     )
   }

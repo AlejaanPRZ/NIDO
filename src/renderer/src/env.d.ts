@@ -1,6 +1,11 @@
 import type { NidoApi } from '../../shared/types'
 
 declare global {
+  /** import.meta.glob de Vite (solo la forma que usa BrandLogo). */
+  interface ImportMeta {
+    glob<T>(pattern: string, options: { eager: true; query: string; import: string }): Record<string, T>
+  }
+
   interface Window {
     nido: NidoApi
   }

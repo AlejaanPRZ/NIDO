@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Widget, Workspace } from '../../shared/types'
+import { BrandLogo, hasBrand } from './BrandLogo'
 import { catalogById } from './catalog'
 import { useApp } from './context'
 import { Icon, type IconName } from './icons'
@@ -145,9 +146,13 @@ export function WidgetFrame({ widget, workspaceId, workspaces, locked, expanded,
         className={`widget-header ${blocked || expanded ? '' : 'widget-drag'}`}
         onDoubleClick={(e) => e.target === e.currentTarget && onExpand(!expanded)}
       >
-        <span className="widget-badge" style={entry ? { ['--tint' as string]: entry.tint } : undefined}>
-          <Icon name={entry?.icon ?? def.icon} size={14} />
-        </span>
+        {hasBrand(entry?.brand) ? (
+          <BrandLogo brand={entry.brand} name={entry.title} size={26} className="widget-brand" />
+        ) : (
+          <span className="widget-badge" style={entry ? { ['--tint' as string]: entry.tint } : undefined}>
+            <Icon name={entry?.icon ?? def.icon} size={14} />
+          </span>
+        )}
         {editing ? (
           <input
             className="widget-title-input no-drag"

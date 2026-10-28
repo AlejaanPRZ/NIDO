@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { AppState, ErrorCode, ExportFile, GoogleStatus, NotionStatus, Theme } from '../../shared/types'
+import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionStatus, Theme } from '../../shared/types'
+import { BrandLogo, brandOfBrowser, hasBrand } from './BrandLogo'
 import { CATALOG } from './catalog'
 import { useApp, type SettingsSection } from './context'
 import { Icon, type IconName } from './icons'
@@ -117,6 +118,26 @@ function GeneralSection(): JSX.Element {
             onChange={(theme) => set({ theme })}
           />
         </div>
+        <div className={`setting-row ${settings.reduceTransparency ? 'is-disabled' : ''}`}>
+          <span className="grow">
+            Intensidad del cristal
+            <small className="muted">Más translucidez y desenfoque, o superficies más sólidas y legibles.</small>
+          </span>
+          <input
+            type="range"
+            className="range glass-range"
+            min={0}
+            max={100}
+            step={5}
+            value={settings.glass}
+            disabled={settings.reduceTransparency}
+            aria-label="Intensidad del cristal"
+            aria-valuetext={`${settings.glass} %`}
+            style={{ ['--pct' as string]: `${settings.glass}%` }}
+            onChange={(e) => set({ glass: Number(e.target.value) })}
+          />
+          <span className="mono muted glass-value">{settings.glass} %</span>
+        </div>
         <Toggle
           label="Reducir transparencia"
           description="Superficies opacas y sin desenfoque: más contraste y menos consumo."
@@ -230,7 +251,7 @@ function ConnectionsSection(): JSX.Element {
   if (detail === 'google') return <GoogleDetail onBack={() => setDetail(null)} />
   if (detail === 'notion') return <NotionDetail onBack={() => setDetail(null)} />
 
-  const gState: ConnState = !google ? 'disconnected' : google.connected ? 'connected' : google.expired ? 'expired' : google.clientId ? 'disconnected' : 'unconfigured'
+  const gState: ConnState = !google ? 'disconnected' : google.connected ? 'connected' : google.expired ? 'expired' : google.builtIn || google.clientId ? 'disconnected' : 'unconfigured'
   const nState: ConnState = !notion ? 'disconnected' : notion.connected ? 'connected' : notion.expired ? 'expired' : 'disconnected'
   const soon = CATALOG.filter((e) => e.status === 'proximamente')
 
@@ -238,7 +259,7 @@ function ConnectionsSection(): JSX.Element {
     <>
       <div className="service-grid">
         <ServiceCard
-          logo={<span className="conn-logo google"><Icon name="calendar" size={16} /></span>}
+          logo={<BrandLogo brand="google-calendar" name="Google Calendar" size={40} decorative />}
           name="Google Calendar"
           desc="Ver y gestionar los eventos de tus calendarios."
           state={gState}
@@ -247,7 +268,7 @@ function ConnectionsSection(): JSX.Element {
           onOpen={() => setDetail('google')}
         />
         <ServiceCard
-          logo={<span className="conn-logo notion">N</span>}
+          logo={<BrandLogo brand="notion" name="Notion" size={40} decorative />}
           name="Notion"
           desc="Usar una base de datos como lista de tareas."
           state={nState}
@@ -278,7 +299,7 @@ function ConnectionsSection(): JSX.Element {
         <div className="soon-list">
           {soon.map((e) => (
             <span key={e.id} className="soon-chip" title={e.description}>
-              <Icon name={e.icon} size={12} /> {e.title}
+              {hasBrand(e.brand) ? <BrandLogo brand={e.brand} name={e.title} size={18} decorative /> : <Icon name={e.icon} size={12} />} {e.title}
             </span>
           ))}
         </div>
@@ -321,6 +342,34 @@ function DetailHeader({ title, logo, state, account, onBack }: { title: string; 
   )
 }
 
+/** Botón de inicio de sesión de un servicio: su logo y «Conectar con …», como en las apps nativas. */
+function SignInButton({ brand, label, busy, onClick, disabled }: { brand: string; label: string; busy: boolean; disabled?: boolean; onClick(): void }): JSX.Element {
+  return (
+    <button className="btn signin" disabled={busy || disabled} onClick={onClick}>
+      <BrandLogo brand={brand} name="" size={22} decorative className="bare" />
+      <span>{label}</span>
+    </button>
+  )
+}
+
+/** Mientras el navegador está abierto: qué pasa y cómo cancelarlo. */
+function WaitingBrowser({ service, onCancel }: { service: string; onCancel(): void }): JSX.Element {
+  return (
+    <div className="waiting-browser" role="status">
+      <Spinner size={14} />
+      <div className="grow">
+        <p>
+          <b>Continúa en tu navegador.</b> Elige la cuenta y acepta los permisos en {service}.
+        </p>
+        <p className="muted small-text">Nido espera hasta 5 minutos. Si cierras la pestaña, pulsa Cancelar.</p>
+      </div>
+      <button className="btn small" onClick={onCancel}>
+        Cancelar
+      </button>
+    </div>
+  )
+}
+
 function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
   const [status, setStatus] = useState<GoogleStatus | null>(null)
   const [clientId, setClientId] = useState('')
@@ -328,23 +377,37 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
   const [busy, setBusy] = useState<'save' | 'connect' | 'disconnect' | null>(null)
   const [error, setError] = useState<{ message: string; code: ErrorCode } | null>(null)
   const [advanced, setAdvanced] = useState(false)
+  const [calendars, setCalendars] = useState<GoogleCalendar[] | null>(null)
 
   useEffect(() => {
     window.nido.google.status().then((r) => {
       if (!r.ok) return
       setStatus(r.data)
       setClientId(r.data.clientId)
+      // Sin cliente integrado ni propio, lo único posible es configurarlo: se abre directamente.
+      if (!r.data.builtIn && !r.data.clientId) setAdvanced(true)
     })
   }, [])
+
+  useEffect(() => {
+    if (!status?.connected) return setCalendars(null)
+    window.nido.google.calendars().then((r) => setCalendars(r.ok ? r.data : []))
+  }, [status?.connected])
 
   const apply = (r: Awaited<ReturnType<typeof window.nido.google.status>>, message?: string): boolean => {
     if (r.ok) {
       setStatus(r.data)
+      setClientId(r.data.clientId)
       setError(null)
       setSecret('')
       if (message) toast(message, 'success')
       notifyIntegrationsChanged()
       return true
+    }
+    if (r.code === 'cancelled') {
+      setError(null)
+      toast(r.error)
+      return false
     }
     setError({ message: r.error, code: r.code })
     if (r.code === 'config') setAdvanced(true)
@@ -353,13 +416,22 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
 
   const saveCredentials = async (): Promise<boolean> => {
     setBusy('save')
-    const ok = apply(await window.nido.google.setCredentials(clientId, secret), 'Credenciales guardadas')
+    const ok = apply(await window.nido.google.setCredentials(clientId, secret), 'Cliente propio guardado')
     setBusy(null)
     return ok
   }
 
+  const useBuiltIn = async (): Promise<void> => {
+    const ok = await confirmDialog({
+      title: 'Usar el cliente de Nido',
+      message: 'Se borrará tu cliente propio. Si estabas conectado con él, tendrás que volver a conectar.',
+      confirmLabel: 'Usar el de Nido'
+    })
+    if (ok) apply(await window.nido.google.clearCredentials(), 'Ahora se usa el cliente de Nido')
+  }
+
   const connect = async (): Promise<void> => {
-    if (clientId.trim() !== status?.clientId || secret) {
+    if (clientId.trim() && (clientId.trim() !== status?.clientId || secret)) {
       if (!(await saveCredentials())) return
     }
     setBusy('connect')
@@ -380,29 +452,44 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
     setBusy(null)
   }
 
-  const state: ConnState = busy === 'connect' ? 'connecting' : !status ? 'disconnected' : status.connected ? 'connected' : status.expired ? 'expired' : error ? 'error' : status.clientId ? 'disconnected' : 'unconfigured'
-  const logo = (
-    <span className="conn-logo google">
-      <Icon name="calendar" size={16} />
-    </span>
-  )
   if (!status) return <Spinner />
+  const canConnect = status.builtIn || !!status.clientId
+  const state: ConnState = busy === 'connect' ? 'connecting' : status.connected ? 'connected' : status.expired ? 'expired' : error ? 'error' : canConnect ? 'disconnected' : 'unconfigured'
+  const logo = <BrandLogo brand="google-calendar" name="Google Calendar" size={40} decorative />
 
   return (
     <div className="conn-detail">
       <DetailHeader title="Google Calendar" logo={logo} state={state} account={status.account} onBack={onBack} />
       {!status.encryption && <ErrorBox message="El cifrado de Windows no está disponible: Nido no guardará credenciales." />}
-      {status.expired && !status.connected && <ErrorBox message="Google caducó o revocó el acceso (pasa cada 7 días mientras tu app esté «En prueba»)." code="auth" onAction={() => void connect()} />}
+      {status.expired && !status.connected && busy !== 'connect' && (
+        <ErrorBox message="Google caducó o revocó el acceso. Vuelve a conectar para seguir viendo tus eventos." code="auth" onAction={() => void connect()} />
+      )}
       {error && <ErrorBox message={error.message} code={error.code} onAction={(c) => (c === 'config' ? setAdvanced(true) : void connect())} />}
 
       {status.connected ? (
         <div className="settings-card">
           <p>
-            Conectado como <b>{status.account ?? 'tu cuenta'}</b>. Nido solo puede ver la lista de calendarios y gestionar eventos.
+            Conectado como <b>{status.account ?? 'tu cuenta'}</b>.
           </p>
+          <div className="calendar-list">
+            {calendars === null ? (
+              <Spinner size={12} />
+            ) : calendars.length === 0 ? (
+              <p className="muted small-text">No se pudo leer la lista de calendarios.</p>
+            ) : (
+              calendars.map((c) => (
+                <div key={c.id} className="calendar-row">
+                  <span className="cal-dot" style={{ background: c.color }} />
+                  <span className="grow ellipsis">{c.name}</span>
+                  <span className="tag soft">{c.canWrite ? 'Editable' : 'Solo lectura'}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <p className="muted small-text">Cada widget de calendario elige qué calendarios muestra desde su botón de calendarios.</p>
           <div className="row">
             <button className="btn small" disabled={busy !== null} onClick={() => void connect()}>
-              <Icon name="reload" size={13} /> Reconectar
+              <Icon name="reload" size={13} /> Cambiar de cuenta
             </button>
             <span className="grow" />
             <button className="btn small danger-ghost" disabled={busy !== null} onClick={() => void disconnect()}>
@@ -410,55 +497,47 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
             </button>
           </div>
         </div>
+      ) : busy === 'connect' ? (
+        <WaitingBrowser service="Google" onCancel={() => void window.nido.google.cancel()} />
+      ) : canConnect ? (
+        <div className="signin-card">
+          <p>Se abrirá tu navegador para que elijas tu cuenta de Google y autorices a Nido. Nido nunca ve tu contraseña.</p>
+          <SignInButton brand="google" label={status.expired ? 'Volver a conectar con Google' : 'Conectar con Google'} busy={busy !== null} onClick={() => void connect()} />
+          <p className="muted small-text">Nido podrá ver tu lista de calendarios y crear, editar o borrar eventos. Nada más.</p>
+        </div>
       ) : (
-        <ol className="stepper">
-          <Step n={1} title="Crea un cliente OAuth en Google Cloud" done={!!status.clientId}>
-            <p className="step-text">
-              Es gratis y tarda unos minutos. Nido no trae credenciales propias: cada usuario usa su propio cliente.
-            </p>
-            <details className="mini-steps">
-              <summary>Ver los pasos</summary>
-              <ol>
-                <li>
-                  <button className="link-btn" onClick={open('https://console.cloud.google.com/projectcreate')}>Crea un proyecto</button> y{' '}
-                  <button className="link-btn" onClick={open('https://console.cloud.google.com/apis/library/calendar-json.googleapis.com')}>habilita Google Calendar API</button>.
-                </li>
-                <li>
-                  En <button className="link-btn" onClick={open('https://console.cloud.google.com/auth/overview')}>Google Auth Platform</button>: público <b>Externo</b> y tu cuenta como <b>usuario de prueba</b>.
-                </li>
-                <li>
-                  En <b>Clientes</b> → <b>Crear cliente</b> → tipo <b>Aplicación de escritorio</b>. Copia el ID de cliente.
-                </li>
-              </ol>
-            </details>
-          </Step>
-          <Step n={2} title="Pega el ID de cliente" done={!!status.clientId && clientId === status.clientId}>
-            <div className="row">
-              <input
-                className="input mono grow"
-                value={clientId}
-                spellCheck={false}
-                aria-label="ID de cliente OAuth"
-                placeholder="123456789-xxxx.apps.googleusercontent.com"
-                onChange={(e) => setClientId(e.target.value)}
-              />
-              <button className="btn small" disabled={!clientId.trim() || busy !== null || clientId === status.clientId} onClick={() => void saveCredentials()}>
-                {busy === 'save' ? 'Guardando…' : 'Guardar'}
-              </button>
-            </div>
-          </Step>
-          <Step n={3} title="Conecta tu cuenta">
-            <p className="step-text">Se abrirá Google en tu navegador para que aceptes los permisos.</p>
-            <button className="btn small primary" disabled={!clientId.trim() || busy !== null} onClick={() => void connect()}>
-              {busy === 'connect' ? 'Esperando a Google… (5 min máx.)' : status.expired ? 'Volver a conectar' : 'Conectar con Google'}
-            </button>
-          </Step>
-        </ol>
+        <div className="settings-card">
+          <p>
+            <b>Esta copia de Nido no trae la conexión con Google preparada.</b> Quien publica Nido tiene que registrarla una vez en Google Cloud (ver CONEXIONES.md). Mientras, puedes usar un cliente OAuth propio en las opciones avanzadas.
+          </p>
+        </div>
       )}
 
       <details className="advanced" open={advanced} onToggle={(e) => setAdvanced((e.target as HTMLDetailsElement).open)}>
         <summary>Opciones avanzadas</summary>
         <div className="form">
+          <p className="step-text">
+            <b>Cliente OAuth propio.</b> Solo si prefieres usar tu propio proyecto de Google Cloud{status.builtIn ? ' en lugar del de Nido' : ''}.
+          </p>
+          <details className="mini-steps">
+            <summary>Cómo crearlo</summary>
+            <ol>
+              <li>
+                <button className="link-btn" onClick={open('https://console.cloud.google.com/projectcreate')}>Crea un proyecto</button> y{' '}
+                <button className="link-btn" onClick={open('https://console.cloud.google.com/apis/library/calendar-json.googleapis.com')}>habilita Google Calendar API</button>.
+              </li>
+              <li>
+                En <button className="link-btn" onClick={open('https://console.cloud.google.com/auth/overview')}>Google Auth Platform</button>: público <b>Externo</b> y tu cuenta como <b>usuario de prueba</b>.
+              </li>
+              <li>
+                En <b>Clientes</b> → <b>Crear cliente</b> → tipo <b>Aplicación de escritorio</b>. Copia el ID y el secreto.
+              </li>
+            </ol>
+          </details>
+          <label className="field">
+            <span>ID de cliente</span>
+            <input className="input mono" value={clientId} spellCheck={false} placeholder="123456789-xxxx.apps.googleusercontent.com" onChange={(e) => setClientId(e.target.value)} />
+          </label>
           <label className="field">
             <span>Secreto de cliente {status.hasClientSecret && <small className="muted">(guardado)</small>}</span>
             <input
@@ -466,24 +545,27 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
               type="password"
               value={secret}
               autoComplete="off"
-              placeholder={status.hasClientSecret ? '•••••••• — escribe para cambiarlo' : 'GOCSPX-… (solo si Google lo pide)'}
+              placeholder={status.hasClientSecret ? '•••••••• — escribe para cambiarlo' : 'GOCSPX-…'}
               onChange={(e) => setSecret(e.target.value)}
             />
-            <small className="muted">
-              Google genera un secreto también para clientes de escritorio. Su guía lo marca como opcional con PKCE, pero su servidor puede exigirlo: si al conectar aparece «pide el secreto», pégalo aquí. No es confidencial en apps de escritorio; Nido lo guarda cifrado igualmente.
-            </small>
+            <small className="muted">Google lo genera también para apps de escritorio y suele exigirlo. En estas apps no es confidencial; Nido lo guarda cifrado igualmente.</small>
           </label>
-          {secret && (
-            <button className="btn small" disabled={busy !== null} onClick={() => void saveCredentials()}>
-              Guardar secreto
+          <div className="row">
+            <button className="btn small" disabled={!clientId.trim() || busy !== null || (clientId === status.clientId && !secret)} onClick={() => void saveCredentials()}>
+              {busy === 'save' ? 'Guardando…' : 'Guardar cliente propio'}
             </button>
-          )}
+            {status.builtIn && status.clientId && (
+              <button className="btn small ghost" disabled={busy !== null} onClick={() => void useBuiltIn()}>
+                Volver al cliente de Nido
+              </button>
+            )}
+          </div>
           <div className="tech">
             <p>
-              <b>Permisos solicitados:</b> calendar.calendarlist.readonly (ver tu lista de calendarios) y calendar.events (crear, editar y borrar eventos).
+              <b>Permisos:</b> calendar.calendarlist.readonly (ver tu lista de calendarios) y calendar.events (crear, editar y borrar eventos).
             </p>
             <p>
-              <b>Método:</b> OAuth 2.0 para apps de escritorio con redirección a 127.0.0.1 en un puerto aleatorio y PKCE (S256).
+              <b>Método:</b> OAuth 2.0 para apps de escritorio en el navegador del sistema, con redirección a 127.0.0.1 en un puerto aleatorio y PKCE (S256). El token se guarda cifrado con Windows.
             </p>
           </div>
         </div>
@@ -495,30 +577,54 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
 function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
   const [status, setStatus] = useState<NotionStatus | null>(null)
   const [token, setToken] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'connect' | 'token' | null>(null)
   const [error, setError] = useState<{ message: string; code: ErrorCode } | null>(null)
+  const [advanced, setAdvanced] = useState(false)
 
   useEffect(() => {
-    window.nido.notion.status().then((r) => r.ok && setStatus(r.data))
+    window.nido.notion.status().then((r) => {
+      if (!r.ok) return
+      setStatus(r.data)
+      if (!r.data.oauth && !r.data.connected) setAdvanced(true)
+    })
   }, [])
 
-  const connect = async (): Promise<void> => {
-    setBusy(true)
-    const r = await window.nido.notion.setToken(token)
-    setBusy(false)
+  const apply = (r: Awaited<ReturnType<typeof window.nido.notion.status>>, message: string): void => {
     if (r.ok) {
       setStatus(r.data)
       setToken('')
       setError(null)
-      toast('Notion conectado', 'success')
+      toast(message, 'success')
       notifyIntegrationsChanged()
-    } else setError({ message: r.error, code: r.code })
+    } else if (r.code === 'cancelled') {
+      setError(null)
+      toast(r.error)
+    } else {
+      setError({ message: r.error, code: r.code })
+      if (r.code === 'config') setAdvanced(true)
+    }
+  }
+
+  const connect = async (): Promise<void> => {
+    setBusy('connect')
+    setError(null)
+    apply(await window.nido.notion.connect(), 'Notion conectado')
+    setBusy(null)
+  }
+
+  const saveToken = async (): Promise<void> => {
+    setBusy('token')
+    apply(await window.nido.notion.setToken(token), 'Notion conectado')
+    setBusy(null)
   }
 
   const disconnect = async (): Promise<void> => {
     const ok = await confirmDialog({
       title: 'Desconectar Notion',
-      message: 'Nido borrará el token guardado. Para revocarlo del todo, elimina la integración en Notion. Tus páginas no se tocan.',
+      message:
+        status?.method === 'oauth'
+          ? 'Nido borrará su acceso guardado. Para retirarlo también en Notion: Ajustes → Conexiones → Nido → Desconectar. Tus páginas no se tocan.'
+          : 'Nido borrará el token guardado. Para revocarlo del todo, elimina la integración en Notion. Tus páginas no se tocan.',
       confirmLabel: 'Desconectar'
     })
     if (!ok) return
@@ -535,59 +641,92 @@ function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
 
   return (
     <div className="conn-detail">
-      <DetailHeader title="Notion" logo={<span className="conn-logo notion">N</span>} state={state} account={status.workspace} onBack={onBack} />
-      {status.expired && !status.connected && <ErrorBox message="Notion rechazó el token guardado (se revocó o se borró la integración). Pega uno nuevo." />}
-      {error && <ErrorBox message={error.message} code={error.code} onAction={() => void connect()} />}
+      <DetailHeader title="Notion" logo={<BrandLogo brand="notion" name="Notion" size={40} decorative />} state={state} account={status.workspace} onBack={onBack} />
+      {status.expired && !status.connected && !busy && (
+        <ErrorBox message="Notion ya no acepta el acceso guardado (se retiró o se borró la integración). Vuelve a conectar." code="auth" onAction={() => void (status.oauth ? connect() : setAdvanced(true))} />
+      )}
+      {error && <ErrorBox message={error.message} code={error.code} onAction={(c) => (c === 'config' ? setAdvanced(true) : void connect())} />}
+
       {status.connected ? (
         <div className="settings-card">
           <p>
             Conectado al espacio <b>{status.workspace ?? 'de Notion'}</b>
-            {status.bot ? ` con la integración «${status.bot}»` : ''}. Elige la base de datos en un widget de Tareas.
+            {status.method === 'internal' ? ` con la integración interna${status.bot ? ` «${status.bot}»` : ''}` : ''}.
+          </p>
+          <p className="muted small-text">
+            Elige la base de datos de tareas y asocia sus propiedades desde un widget de Tareas (origen Notion).
+            {status.method === 'oauth' ? ' Para dar acceso a más páginas, pulsa «Elegir páginas».' : ''}
           </p>
           <div className="row">
+            {status.method === 'oauth' && (
+              <button className="btn small" disabled={busy !== null} onClick={() => void connect()}>
+                <Icon name="edit" size={13} /> Elegir páginas
+              </button>
+            )}
             <span className="grow" />
             <button className="btn small danger-ghost" onClick={() => void disconnect()}>
               Desconectar
             </button>
           </div>
         </div>
+      ) : busy === 'connect' ? (
+        <WaitingBrowser service="Notion" onCancel={() => void window.nido.notion.cancel()} />
+      ) : status.oauth ? (
+        <div className="signin-card">
+          <p>
+            Se abrirá Notion en tu navegador. Inicia sesión como siempre —también con Google, si así entras en Notion—, elige el espacio de trabajo y las páginas o bases de datos que Nido podrá ver.
+          </p>
+          <SignInButton brand="notion" label="Conectar con Notion" busy={busy !== null} onClick={() => void connect()} />
+          <p className="muted small-text">Entrar en Notion con Google no conecta Google Calendar: cada servicio se autoriza por separado.</p>
+        </div>
       ) : (
-        <ol className="stepper">
-          <Step n={1} title="Crea una integración interna">
-            <p className="step-text">
-              En <button className="link-btn" onClick={open('https://www.notion.so/profile/integrations')}>tus integraciones de Notion</button> → Nueva integración → tipo <b>Interna</b>. Deja marcadas las capacidades de leer, actualizar e insertar contenido.
-            </p>
-          </Step>
-          <Step n={2} title="Pega su token">
-            <form
-              className="row"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void connect()
-              }}
-            >
-              <input className="input mono grow" type="password" autoComplete="off" aria-label="Token de integración" value={token} placeholder="ntn_…" onChange={(e) => setToken(e.target.value)} />
-              <button className="btn small primary" type="submit" disabled={!token.trim() || busy}>
-                {busy ? 'Comprobando…' : 'Conectar'}
-              </button>
-            </form>
-          </Step>
-          <Step n={3} title="Comparte tu base de datos con la integración">
-            <p className="step-text">
-              En Notion, abre la base de datos de tareas → <b>•••</b> → <b>Conexiones</b> → añade tu integración. Sin esto no aparecerá en Nido.
-            </p>
-          </Step>
-        </ol>
+        <div className="settings-card">
+          <p>
+            <b>Esta copia de Nido no trae la autorización de Notion preparada.</b> Necesita una integración pública y un pequeño servicio que guarde su secreto (ver CONEXIONES.md). Mientras, puedes conectar con un token de integración interna en las opciones avanzadas.
+          </p>
+        </div>
       )}
-      <details className="advanced">
+
+      <details className="advanced" open={advanced} onToggle={(e) => setAdvanced((e.target as HTMLDetailsElement).open)}>
         <summary>Opciones avanzadas</summary>
-        <div className="tech">
-          <p>
-            <b>Método:</b> token de integración interna (Notion no exige OAuth para uso personal). API versión 2026-03-11 con «data sources».
+        <div className="form">
+          <p className="step-text">
+            <b>Token de integración interna.</b> Alternativa sin servicio intermedio, pensada para uso personal.
           </p>
-          <p>
-            <b>Acceso:</b> solo a las páginas y bases de datos que compartas con la integración.
-          </p>
+          <ol className="stepper compact">
+            <Step n={1} title="Crea una integración interna">
+              <p className="step-text">
+                En <button className="link-btn" onClick={open('https://www.notion.so/profile/integrations')}>tus integraciones de Notion</button> → Nueva integración → tipo <b>Interna</b>, con permiso para leer, actualizar e insertar contenido.
+              </p>
+            </Step>
+            <Step n={2} title="Pega su token">
+              <form
+                className="row"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void saveToken()
+                }}
+              >
+                <input className="input mono grow" type="password" autoComplete="off" aria-label="Token de integración" value={token} placeholder="ntn_…" onChange={(e) => setToken(e.target.value)} />
+                <button className="btn small" type="submit" disabled={!token.trim() || busy !== null}>
+                  {busy === 'token' ? 'Comprobando…' : 'Conectar con token'}
+                </button>
+              </form>
+            </Step>
+            <Step n={3} title="Comparte la base de datos con la integración">
+              <p className="step-text">
+                En Notion: base de datos → <b>•••</b> → <b>Conexiones</b> → añade tu integración.
+              </p>
+            </Step>
+          </ol>
+          <div className="tech">
+            <p>
+              <b>Método:</b> autorización oficial de Notion (OAuth de integración pública) en el navegador del sistema. El código se canjea en un servicio aparte que guarda el secreto de Notion; Nido solo guarda el token, cifrado con Windows.
+            </p>
+            <p>
+              <b>Acceso:</b> solo a las páginas y bases de datos que elijas al autorizar. API 2026-03-11.
+            </p>
+          </div>
         </div>
       </details>
     </div>
@@ -636,6 +775,7 @@ function BrowsersSection(): JSX.Element {
         {browsers.map((b) => (
           <label key={b.id} className="radio-row">
             <input type="radio" name="browser" checked={settings.defaultBrowser === b.id} onChange={() => choose(b.id)} />
+            <BrandLogo brand={brandOfBrowser(b.name) ?? ''} name={b.name} size={28} fallback="web" decorative />
             <span className="grow">
               {b.name}
               <small className="muted mono" title={b.path}>

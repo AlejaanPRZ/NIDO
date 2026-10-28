@@ -42,6 +42,28 @@ const ROW_HEIGHT = 32
 const MARGIN = 16
 /** Por debajo de este ancho de panel (px) los widgets se apilan en vez de usar 12 columnas. */
 const STACK_BELOW = 860
+/**
+ * Ancho de columna de referencia (panel de ~1340 px). Los mínimos de cada widget se definen en
+ * columnas a este ancho; con ventanas más estrechas o el escalado de Windows al 125–200 %, las
+ * columnas encogen y un widget de 2 columnas quedaría en ~130 px. Por eso se conservan en píxeles.
+ */
+const REF_COL = 97
+
+/** Ancho mínimo en píxeles de un widget de minW columnas (el que tiene en el panel de referencia). */
+const minPx = (minW: number): number => minW * REF_COL + (minW - 1) * MARGIN
+
+/**
+ * Distribución adaptada a columnas estrechas: cada widget se ensancha hasta su mínimo en píxeles
+ * (sin pasar del ancho del panel) y, si se sale por la derecha, se desplaza. Las colisiones las
+ * resuelve la cuadrícula empujando hacia abajo. Solo sirve para pintar: no se guarda.
+ */
+function adaptLayout(layout: Layout[], colWidth: number): Layout[] {
+  return layout.map((l) => {
+    const need = Math.min(GRID_COLS, Math.ceil((minPx(l.minW ?? 1) + MARGIN) / (colWidth + MARGIN)))
+    const w = Math.max(l.w, need)
+    return { ...l, w, minW: need, x: Math.min(l.x, GRID_COLS - w) }
+  })
+}
 
 /**
  * Distribución del modo apilado: una sola columna, en orden de lectura (fila y luego columna)
@@ -218,7 +240,14 @@ function WorkspaceGrid({
   // Apilado y cuadrícula usan el mismo componente y los mismos hijos (mismas key): al cruzar el umbral
   // solo cambia la distribución, así que ningún widget se desmonta (la música, los paneles web y los
   // temporizadores siguen como estaban).
-  const layout = stacked ? stackLayout(gridLayout) : gridLayout
+  // Columnas más estrechas que las de referencia: los widgets conservan su ancho mínimo en píxeles.
+  const adapted = !stacked && width > 0 && colWidth < REF_COL - 0.5
+  const layout = stacked ? stackLayout(gridLayout) : adapted ? adaptLayout(gridLayout, colWidth) : gridLayout
+
+  /** En modo adaptado solo se guarda el widget que el usuario ha movido o redimensionado. */
+  const saveOne = (item: Layout): void => {
+    dispatch({ type: 'layout', workspace: workspace.id, layout: workspace.layout.map((l) => (l.i === item.i ? { ...l, x: item.x, y: item.y, w: item.w, h: item.h } : l)) })
+  }
 
   const guides = { '--colw': `${colWidth}px`, '--colstep': `${colWidth + MARGIN}px`, '--rowh': `${ROW_HEIGHT}px`, '--rowstep': `${ROW_HEIGHT + MARGIN}px` } as CSSProperties
 
@@ -250,18 +279,26 @@ function WorkspaceGrid({
           draggableCancel=".no-drag"
           isDraggable={!locked && !stacked}
           isResizable={!locked && !stacked}
-          compactType="vertical"
+          // Colocación libre: el widget se queda donde se suelta (con huecos si hace falta) y solo
+          // desplaza hacia abajo a los que pisa. Con compactación vertical subía solo y deshacía el gesto.
+          compactType={null}
           preventCollision={false}
           // Sin transform CSS: así un widget ampliado (position: fixed) se coloca respecto a la ventana.
           useCSSTransforms={false}
           // La distribución apilada es solo de presentación: la guardada no cambia.
           onLayoutChange={(next) => {
-            if (!stacked) dispatch({ type: 'layout', workspace: workspace.id, layout: next })
+            if (!stacked && !adapted) dispatch({ type: 'layout', workspace: workspace.id, layout: next })
           }}
           onDragStart={() => onInteract(true)}
-          onDragStop={() => onInteract(false)}
+          onDragStop={(_l, _old, item) => {
+            onInteract(false)
+            if (adapted) saveOne(item)
+          }}
           onResizeStart={() => onInteract(true)}
-          onResizeStop={() => onInteract(false)}
+          onResizeStop={(_l, _old, item) => {
+            onInteract(false)
+            if (adapted) saveOne(item)
+          }}
         >
           {workspace.widgets.map((widget) => (
             <div key={widget.id} className={expanded === widget.id ? 'has-expanded' : ''}>
@@ -301,6 +338,55 @@ export default function App(): JSX.Element {
   // Mientras se arrastra o redimensiona, los <webview> no deben capturar el ratón.
   const [interacting, setInteracting] = useState(false)
 
+  // El estado de React llega un fotograma tarde: si el ratón pasa por encima de un panel web justo al
+  // empezar, el <webview> se queda con los eventos y el arrastre se corta. Por eso se marca <html> en el
+  // mismo pointerdown (fase de captura) y, mientras dura, el panel se desplaza solo cerca de los bordes.
+  useEffect(() => {
+    const root = document.documentElement
+    let pointerY = -1
+    let frame = 0
+    const scroll = (): void => {
+      const board = document.querySelector<HTMLElement>('.board-scroll')
+      if (board && pointerY >= 0) {
+        const r = board.getBoundingClientRect()
+        const edge = 56
+        const speed = pointerY < r.top + edge ? -(r.top + edge - pointerY) : pointerY > r.bottom - edge ? pointerY - (r.bottom - edge) : 0
+        if (speed) board.scrollTop += Math.max(-24, Math.min(24, speed / 2))
+      }
+      frame = requestAnimationFrame(scroll)
+    }
+    const down = (e: PointerEvent): void => {
+      if (e.button !== 0) return
+      const t = e.target as Element | null
+      if (!t?.closest?.('.widget-drag, .react-resizable-handle') || t.closest('.no-drag')) return
+      root.classList.add('is-pointer-drag')
+      pointerY = e.clientY
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(scroll)
+    }
+    const move = (e: PointerEvent): void => {
+      if (root.classList.contains('is-pointer-drag')) pointerY = e.clientY
+    }
+    const up = (): void => {
+      root.classList.remove('is-pointer-drag')
+      pointerY = -1
+      cancelAnimationFrame(frame)
+    }
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointermove', move, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    window.addEventListener('blur', up)
+    return () => {
+      up()
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointermove', move, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+      window.removeEventListener('blur', up)
+    }
+  }, [])
+
   // La bienvenida aparece una sola vez: queda marcada en el estado guardado.
   useEffect(() => {
     if (ready && !state.settings.welcomeSeen) setWelcomeOpen(true)
@@ -325,7 +411,8 @@ export default function App(): JSX.Element {
     else root.dataset.theme = settings.theme
     root.dataset.transparency = settings.reduceTransparency ? 'reduced' : 'full'
     root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
-  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion])
+    root.style.setProperty('--glass-k', String(settings.glass / 100))
+  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion, settings.glass])
 
   // Al cambiar de espacio se cierra el widget ampliado.
   useEffect(() => setExpanded(null), [state.activeWorkspace])

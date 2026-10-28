@@ -1,0 +1,10 @@
+name = "nido-notion-oauth"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+# Cámbialo por la URL pública del Worker una vez desplegado.
+PUBLIC_URL = "https://nido-notion-oauth.TU-CUENTA.workers.dev"
+# NOTION_CLIENT_ID y NOTION_CLIENT_SECRET se guardan como secretos:
+#   npx wrangler secret put NOTION_CLIENT_ID
+#   npx wrangler secret put NOTION_CLIENT_SECRET

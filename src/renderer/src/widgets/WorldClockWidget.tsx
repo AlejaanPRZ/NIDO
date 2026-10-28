@@ -20,7 +20,8 @@ function offsetMinutes(tz: string, at: Date): number {
     .formatToParts(at)
     .reduce<Record<string, number>>((acc, p) => (p.type !== 'literal' ? { ...acc, [p.type]: Number(p.value) } : acc), {})
   const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute)
-  return Math.round((asUtc - at.getTime()) / 60_000)
+  // El formato no lleva segundos: se compara con el minuto exacto (si no, salía −5,0166 h).
+  return Math.round((asUtc - Math.floor(at.getTime() / 60_000) * 60_000) / 60_000)
 }
 
 export function WorldClockWidget({ widget, update }: WidgetProps<'worldclock'>): JSX.Element {
@@ -45,7 +46,8 @@ export function WorldClockWidget({ widget, update }: WidgetProps<'worldclock'>):
           const day = new Intl.DateTimeFormat(undefined, { timeZone: z.tz, weekday: 'short' }).format(now)
           const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: z.tz, hour: 'numeric', hourCycle: 'h23' }).format(now))
           const night = hour < 7 || hour >= 21
-          const sign = diff === 0 ? 'Misma hora' : `${diff > 0 ? '+' : '−'}${Math.abs(diff) / 60} h`
+          const abs = Math.abs(diff)
+          const sign = diff === 0 ? 'Misma hora' : `${diff > 0 ? '+' : '−'}${Math.floor(abs / 60)}${abs % 60 ? `:${String(abs % 60).padStart(2, '0')}` : ''} h`
           return (
             <li key={z.id} className="zone">
               <span className={`zone-dot ${night ? 'night' : 'day'}`} title={night ? 'Noche' : 'Día'} />
