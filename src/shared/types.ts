@@ -128,6 +128,8 @@ export interface WebData {
   url: string
   /** Barra de dirección de Nido visible (si no, la navegación va en la cabecera del widget) */
   bar?: boolean
+  /** No se suspende aunque no se vea (p. ej. una llamada o un chat que debe seguir conectado) */
+  keepAlive?: boolean
 }
 
 export interface LinkItem {
@@ -337,6 +339,8 @@ export interface Settings {
   palette: Palette
   /** Los degradados del fondo se mueven despacio */
   animatedBackground: boolean
+  /** Minutos sin verse tras los que un panel web se suspende para liberar memoria; 0 = nunca */
+  suspendWebAfter: number
   /** Mascota (un braco en pixel art) paseando por el borde inferior */
   mascot: boolean
   /** Al cerrar la ventana, Nido sigue en la bandeja del sistema */

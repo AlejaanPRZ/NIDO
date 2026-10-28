@@ -57,6 +57,8 @@ export function Mascot({ reduceMotion }: { reduceMotion: boolean }): JSX.Element
   const holder = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [bubble, setBubble] = useState<Bubble>(null)
+  // Despierta el bucle al instante (al acariciarlo mientras duerme o está quieto).
+  const wake = useRef<(() => void) | null>(null)
   // Estado del perro fuera de React: se actualiza en cada fotograma.
   const dog = useRef({
     x: 40,
@@ -84,10 +86,22 @@ export function Mascot({ reduceMotion }: { reduceMotion: boolean }): JSX.Element
       ctx.clearRect(0, 0, SPRITE_W, SPRITE_H)
       ctx.drawImage(frameCanvas(pose), 0, 0, SPRITE_W, SPRITE_H)
     }
+    // Solo se toca el DOM si algo cambia: escribir el mismo transform en cada fotograma obligaba a
+    // recomponer la ventana a la frecuencia del monitor aunque el perro estuviera quieto.
+    let placedX = NaN
+    let placedDir = 0
     const place = (): void => {
       if (!holder.current) return
-      holder.current.style.transform = `translateX(${Math.round(d.x)}px)`
-      canvas.current!.style.transform = d.dir < 0 ? 'scaleX(-1)' : ''
+      // Posición en múltiplos de un píxel del dibujo, como el pixel art.
+      const x = Math.round(d.x / SCALE) * SCALE
+      if (x !== placedX) {
+        holder.current.style.transform = `translateX(${x}px)`
+        placedX = x
+      }
+      if (d.dir !== placedDir) {
+        canvas.current!.style.transform = d.dir < 0 ? 'scaleX(-1)' : ''
+        placedDir = d.dir
+      }
     }
 
     const start = (activity: Activity, seconds: number, now: number): void => {
@@ -125,14 +139,32 @@ export function Mascot({ reduceMotion }: { reduceMotion: boolean }): JSX.Element
     }
 
     let raf = 0
+    let timer: number | undefined
     let last = performance.now()
     walkSomewhere(last)
-    const tick = (now: number): void => {
+    // El bucle solo despierta cuando toca: el siguiente paso, el siguiente fotograma de la animación o la
+    // siguiente actividad, no 60–144 veces por segundo.
+    const schedule = (now: number): void => {
+      const anim = ANIMATIONS[d.activity]
+      const nextFrame = anim.frames.length > 1 ? d.frameAt + 1000 / anim.fps : Infinity
+      // Andando avanza a saltos de un píxel del dibujo (SCALE px): basta con despertar para el
+      // siguiente paso, no en cada fotograma del monitor.
+      const nextStep = d.activity === 'walk' ? now + (SCALE / SPEED) * 1000 : d.until
+      timer = window.setTimeout(() => (raf = requestAnimationFrame(tick)), Math.max(16, Math.min(nextFrame, nextStep) - now))
+    }
+    wake.current = () => {
+      clearTimeout(timer)
+      cancelAnimationFrame(raf)
       raf = requestAnimationFrame(tick)
+    }
+    const tick = (now: number): void => {
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       // Quieto mientras se arrastra un widget o la ventana no se ve.
-      if (document.hidden || document.documentElement.classList.contains('is-pointer-drag')) return
+      if (document.hidden || document.documentElement.classList.contains('is-pointer-drag')) {
+        timer = window.setTimeout(() => (raf = requestAnimationFrame(tick)), 250)
+        return
+      }
       const anim = ANIMATIONS[d.activity]
       if (now - d.frameAt >= 1000 / anim.fps) {
         d.frame = (d.frame + 1) % anim.frames.length
@@ -151,6 +183,7 @@ export function Mascot({ reduceMotion }: { reduceMotion: boolean }): JSX.Element
       }
       place()
       draw(ANIMATIONS[d.activity].frames[d.frame % ANIMATIONS[d.activity].frames.length])
+      schedule(now)
     }
     raf = requestAnimationFrame(tick)
 
@@ -166,6 +199,8 @@ export function Mascot({ reduceMotion }: { reduceMotion: boolean }): JSX.Element
     window.addEventListener('resize', onResize)
     return () => {
       cancelAnimationFrame(raf)
+      clearTimeout(timer)
+      wake.current = null
       window.removeEventListener('pointerdown', onInput, true)
       window.removeEventListener('keydown', onInput, true)
       window.removeEventListener('resize', onResize)
@@ -182,6 +217,7 @@ export function Mascot({ reduceMotion }: { reduceMotion: boolean }): JSX.Element
       d.until = now + 2200
       d.frame = 0
       d.frameAt = now
+      wake.current?.()
     }
     setBubble({ kind: 'hearts', key: now })
   }

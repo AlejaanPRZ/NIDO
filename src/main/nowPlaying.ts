@@ -13,7 +13,9 @@ import scriptSource from './now-playing.ps1?raw'
 const COMMANDS: ReadonlySet<MediaCommand> = new Set(['toggle', 'next', 'prev', 'seek', 'shuffle', 'repeat'])
 const REPEAT_MODES = new Set(['None', 'Track', 'List'])
 const MAX_THUMBS = 20
-const STOP_DELAY_MS = 10_000
+// Sin nadie mirando, PowerShell se cierra tras este margen: cambiar de espacio y volver enseguida no
+// lo relanza (arrancar cuesta 3–4 s), pero en la bandeja o en otro espacio no ocupa memoria.
+const STOP_DELAY_MS = 60_000
 const MAX_RESTART_DELAY_MS = 30_000
 
 const subscribers = new Set<WebContents>()

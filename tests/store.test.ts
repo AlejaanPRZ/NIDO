@@ -67,13 +67,19 @@ describe('migrate', () => {
   })
 
   it('corrige ajustes no válidos sin perder los buenos', () => {
-    const raw = { version: 3, workspaces: [], activeWorkspace: 'nada', settings: { palette: 'arcoiris', glass: 250, animatedBackground: 1, theme: 'dark' } }
+    const raw = { version: 3, workspaces: [], activeWorkspace: 'nada', settings: { palette: 'arcoiris', glass: 250, animatedBackground: 1, theme: 'dark', suspendWebAfter: 999 } }
     const state = migrate(raw)!
     expect(state.settings.palette).toBe('nido')
     expect(state.settings.glass).toBe(100)
     expect(state.settings.animatedBackground).toBe(true)
     expect(state.settings.theme).toBe('dark')
+    expect(state.settings.suspendWebAfter).toBe(120)
     expect(state.workspaces.some((w) => w.id === state.activeWorkspace)).toBe(true)
+  })
+
+  it('los paneles web se suspenden por defecto a los 5 minutos y respetan «Nunca» (0)', () => {
+    expect(migrate({ version: 3, workspaces: [], settings: {} })!.settings.suspendWebAfter).toBe(5)
+    expect(migrate({ version: 3, workspaces: [], settings: { suspendWebAfter: 0 } })!.settings.suspendWebAfter).toBe(0)
   })
 
   it('conserva un estilo válido y los campos nuevos de los widgets', () => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useApp } from '../context'
+import { useActive, useApp } from '../context'
 import { Icon } from '../icons'
 import { toast } from '../ui/feedback'
 import { MenuButton, type MenuItem } from '../ui/Menu'
@@ -18,9 +18,18 @@ const SIGN_IN_HOSTS = ['accounts.google.com', 'login.live.com', 'login.microsoft
  * abrir la página fuera (menú ↗), nunca se incrustan.
  * La barra de dirección se puede plegar: entonces atrás, recargar y abrir fuera van en la
  * cabecera del widget y la página ocupa todo el alto. No se toca el diseño de la página.
+ *
+ * Suspensión: cada panel es una web completa en su propio proceso (decenas o cientos de MB). Si no
+ * se ve (otro espacio activo o Nido en la bandeja) durante settings.suspendWebAfter minutos, se
+ * desmonta el <webview> y su proceso se cierra. No se suspende si está sonando ni si el panel está
+ * marcado «Mantener activo». Al volver a verse, se monta otra vez en la página donde estaba.
  */
 export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
-  const { browsers, openSettings } = useApp()
+  const { browsers, openSettings, settings } = useApp()
+  const active = useActive()
+  const [suspended, setSuspended] = useState(false)
+  // Cada vez que se reanuda se monta un <webview> nuevo (key) en la última página visitada.
+  const [epoch, setEpoch] = useState(0)
   const slot = useHeaderSlot()
   const ref = useRef<WebviewElement>(null)
   // El src solo se fija al montar; después se navega con loadURL para no recargar en cada guardado.
@@ -34,6 +43,41 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
 
   const updateRef = useRef(update)
   updateRef.current = update
+  const currentRef = useRef(current)
+  currentRef.current = current
+  const [resumeUrl, setResumeUrl] = useState(initialUrl)
+
+  // Suspender tras un rato sin verse; reanudar en cuanto vuelve a verse.
+  const minutes = settings.suspendWebAfter
+  const keepAlive = !!widget.data.keepAlive
+  useEffect(() => {
+    if (active) {
+      if (suspended) {
+        setSuspended(false)
+        setEpoch((n) => n + 1)
+      }
+      return
+    }
+    if (suspended || keepAlive || !minutes) return
+    let timer: number
+    const tryNow = (): void => {
+      let audible = false
+      try {
+        audible = !!ref.current?.isCurrentlyAudible()
+      } catch {
+        // El webview aún no está listo: se trata como silencioso.
+      }
+      // Sonando (música, vídeo, llamada): no se corta; se vuelve a mirar en un minuto.
+      if (audible) {
+        timer = window.setTimeout(tryNow, 60_000)
+        return
+      }
+      setResumeUrl(currentRef.current)
+      setSuspended(true)
+    }
+    timer = window.setTimeout(tryNow, minutes * 60_000)
+    return () => clearTimeout(timer)
+  }, [active, suspended, keepAlive, minutes])
 
   const openIn = (browserId: string): void => {
     void window.nido.browsers.open(browserId, [current]).then((r) => !r.ok && toast(r.error, 'error'))
@@ -72,7 +116,8 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
       view.removeEventListener('did-stop-loading', onStop)
       view.removeEventListener('did-fail-load', onFail)
     }
-  }, [])
+    // Un <webview> nuevo tras cada reanudación.
+  }, [suspended, epoch])
 
   const go = (): void => {
     const url = normalizeUrl(address)
@@ -84,7 +129,17 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
     { label: 'Navegador predeterminado del sistema', onSelect: () => openIn('system') },
     ...browsers.map((b) => ({ label: b.name, onSelect: () => openIn(b.id) })),
     { separator: true },
-    { label: 'Gestionar navegadores…', icon: 'settings' as const, onSelect: () => openSettings('navegadores') }
+    { label: 'Gestionar navegadores…', icon: 'settings' as const, onSelect: () => openSettings('navegadores') },
+    { separator: true },
+    { header: 'Este panel' },
+    {
+      label: 'Mantener activo aunque no se vea',
+      checked: keepAlive,
+      onSelect: () => {
+        update({ keepAlive: !keepAlive })
+        toast(keepAlive ? 'El panel se suspenderá cuando lleve un rato sin verse.' : 'Este panel ya no se suspenderá.', 'info')
+      }
+    }
   ]
 
   const reload = (
@@ -158,7 +213,14 @@ export function WebWidget({ widget, update }: WidgetProps<'web'>): JSX.Element {
         </div>
       )}
       <div className="web-view-wrap">
-        <webview ref={ref} src={initialUrl} partition="persist:nido-web" className="web-view" />
+        {suspended ? (
+          <div className="web-paused">
+            <Icon name="pause" size={16} />
+            <span>Panel en pausa para ahorrar memoria. Se recarga al volver.</span>
+          </div>
+        ) : (
+          <webview key={epoch} ref={ref} src={resumeUrl} partition="persist:nido-web" className="web-view" />
+        )}
         {failed && (
           <div className="web-error">
             <p>{failed}</p>

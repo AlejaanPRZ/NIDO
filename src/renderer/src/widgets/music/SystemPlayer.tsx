@@ -19,13 +19,16 @@ const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: 'all', all: 'one', on
 function useNowPlaying(): { state: NowPlayingState | null; thumbs: Record<string, string> } {
   const [state, setState] = useState<NowPlayingState | null>(null)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
-  useEffect(
-    () =>
-      window.nido.nowPlaying.subscribe(setState, (key, dataUrl) =>
-        setThumbs((prev) => Object.fromEntries(Object.entries({ ...prev, [key]: dataUrl }).slice(-MAX_THUMBS)))
-      ),
-    []
-  )
+  // Solo se escucha mientras el widget se ve (su espacio está activo y la ventana visible): así el
+  // PowerShell de «Ahora suena» no sigue vivo con Nido en la bandeja o en otro espacio. Al volver,
+  // se muestra al momento lo último conocido mientras llega lo actual.
+  const active = useActive()
+  useEffect(() => {
+    if (!active) return
+    return window.nido.nowPlaying.subscribe(setState, (key, dataUrl) =>
+      setThumbs((prev) => Object.fromEntries(Object.entries({ ...prev, [key]: dataUrl }).slice(-MAX_THUMBS)))
+    )
+  }, [active])
   return { state, thumbs }
 }
 
@@ -33,9 +36,10 @@ function useNowPlaying(): { state: NowPlayingState | null; thumbs: Record<string
 function useLivePosition(session: MediaSession | undefined): number {
   const playing = session?.status === 'Playing'
   const [now, setNow] = useState(() => Date.now())
-  // Solo se repinta el progreso mientras se ve (el audio de la otra app sigue igual).
+  // Solo se repinta el progreso mientras se ve (el audio de la otra app sigue igual), una vez por
+  // segundo: el tiempo se muestra en minutos y segundos.
   const active = useActive()
-  useInterval(() => setNow(Date.now()), 500, playing && active)
+  useInterval(() => setNow(Date.now()), 1000, playing && active)
   if (!session) return 0
   if (!playing) return session.position
   const position = session.position + Math.max(0, (now - session.updatedAt) / 1000)

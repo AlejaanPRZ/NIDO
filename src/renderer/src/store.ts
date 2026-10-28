@@ -111,6 +111,7 @@ export function defaultSettings(): Settings {
     closeToTray: true,
     globalShortcut: 'Control+Alt+N',
     mascot: true,
+    suspendWebAfter: 5,
     locked: false,
     reduceTransparency: false,
     glass: 60,
@@ -209,6 +210,7 @@ function sanitize(raw: any): AppState {
     palette: PALETTES.includes(raw.settings?.palette) ? raw.settings.palette : defaults.palette,
     animatedBackground: !!raw.settings?.animatedBackground,
     mascot: typeof raw.settings?.mascot === 'boolean' ? raw.settings.mascot : defaults.mascot,
+    suspendWebAfter: Number.isFinite(raw.settings?.suspendWebAfter) ? Math.min(120, Math.max(0, Math.round(raw.settings.suspendWebAfter))) : defaults.suspendWebAfter,
     closeToTray: typeof raw.settings?.closeToTray === 'boolean' ? raw.settings.closeToTray : defaults.closeToTray,
     globalShortcut: typeof raw.settings?.globalShortcut === 'string' ? raw.settings.globalShortcut : defaults.globalShortcut,
     glass: Number.isFinite(raw.settings?.glass) ? Math.min(100, Math.max(0, Math.round(raw.settings.glass))) : defaults.glass

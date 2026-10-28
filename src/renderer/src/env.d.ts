@@ -21,6 +21,8 @@ declare global {
     goForward(): void
     reload(): void
     stop(): void
+    /** Si la página está reproduciendo sonido (música, vídeo, llamada) */
+    isCurrentlyAudible(): boolean
   }
 }
 

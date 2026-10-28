@@ -235,6 +235,23 @@ function GeneralSection(): JSX.Element {
           onChange={(v) => set({ mascot: v })}
         />
       </Group>
+      <Group title="Paneles web">
+        <div className="setting-row">
+          <span className="grow">
+            Suspender los paneles web que no se ven
+            <small className="muted">
+              Cada panel es una web completa y ocupa memoria aunque esté en otro espacio. Si lleva este tiempo sin verse se cierra y, al volver, se recarga en la misma página. Los que estén sonando no se suspenden, y cada panel puede quedarse activo desde su menú ↗.
+            </small>
+          </span>
+          <select className="chip-select" aria-label="Suspender los paneles web que no se ven" value={settings.suspendWebAfter} onChange={(e) => set({ suspendWebAfter: Number(e.target.value) })}>
+            <option value={1}>Tras 1 minuto</option>
+            <option value={5}>Tras 5 minutos</option>
+            <option value={15}>Tras 15 minutos</option>
+            <option value={30}>Tras 30 minutos</option>
+            <option value={0}>Nunca</option>
+          </select>
+        </div>
+      </Group>
       <Group title="Ventana">
         <Toggle
           label="Mantener en la bandeja al cerrar"

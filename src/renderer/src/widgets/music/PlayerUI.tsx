@@ -113,7 +113,7 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
         // Sin búsqueda: solo una barra de progreso, sin tirador.
         p.duration > 0 && (
           <div className="progress-static" aria-label={`Progreso ${formatTime(shown)} de ${formatTime(p.duration)}`}>
-            <i style={{ width: `${pct}%` }} />
+            <i style={{ transform: `translateX(${pct - 100}%)` }} />
           </div>
         )
       ) : (
