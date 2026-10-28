@@ -46,9 +46,11 @@ interface TopbarProps {
   onCatalog(): void
   onEditWorkspace(id: string): void
   onArrange(): void
+  /** Vuelve a mostrar el recorrido de bienvenida */
+  onTour(): void
 }
 
-export function Topbar({ state, onSearch, onCatalog, onEditWorkspace, onArrange }: TopbarProps): JSX.Element {
+export function Topbar({ state, onSearch, onCatalog, onEditWorkspace, onArrange, onTour }: TopbarProps): JSX.Element {
   const { dispatch, openSettings } = useApp()
   const { locked } = state.settings
 
@@ -119,6 +121,9 @@ export function Topbar({ state, onSearch, onCatalog, onEditWorkspace, onArrange 
         <button className="btn primary small add-widget" onClick={onCatalog} disabled={locked} title={locked ? 'Desbloquea la distribución para añadir widgets' : 'Abrir el catálogo de widgets'}>
           <Icon name="plus" size={14} />
           <span className="add-label">Añadir widget</span>
+        </button>
+        <button className="icon-btn tb-btn" title="Ver el recorrido de bienvenida (F1)" aria-label="Ver el recorrido de bienvenida" onClick={onTour}>
+          <Icon name="help" size={16} />
         </button>
         <button className="icon-btn tb-btn" title="Ajustes (Ctrl+,)" aria-label="Ajustes" onClick={() => openSettings()}>
           <Icon name="settings" size={16} />

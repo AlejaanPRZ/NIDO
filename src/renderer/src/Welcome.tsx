@@ -5,7 +5,7 @@ import { useApp } from './context'
 import { Icon, type IconName } from './icons'
 import { useEscape } from './ui/Modal'
 
-// Recorrido de bienvenida (primer inicio; F1 o Ajustes → Ayuda para repetirlo). Cuatro escenas con
+// Recorrido de bienvenida (primer inicio; para repetirlo: botón «?» de la barra, F1 o Ajustes → Ayuda). Cuatro escenas con
 // una demostración animada de la interfaz real. Cambiar de escena usa transiciones (si se pulsa
 // varias veces seguidas, siguen desde donde estaban); las demostraciones son animaciones CSS en bucle
 // que solo corren en la escena visible. El estilo base de cada demostración es su estado final, así

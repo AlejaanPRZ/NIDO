@@ -626,6 +626,7 @@ export default function App(): JSX.Element {
           onCatalog={() => setCatalogOpen(true)}
           onEditWorkspace={setEditingWorkspace}
           onArrange={arrangeActive}
+          onTour={showWelcome}
         />
         <main className="board-scroll">
           <div className="board">

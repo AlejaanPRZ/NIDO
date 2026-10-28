@@ -1227,7 +1227,7 @@ function HelpSection({ onShowWelcome }: { onShowWelcome(): void }): JSX.Element 
     <>
       <Group title="Bienvenida">
         <div className="row">
-          <p className="muted small-text grow">Cuatro pasos animados con lo básico de Nido. También con F1.</p>
+          <p className="muted small-text grow">Cuatro pasos animados con lo básico de Nido. También con el botón «?» de la barra o F1.</p>
           <button className="btn small" onClick={onShowWelcome}>
             Repetir el recorrido
           </button>
