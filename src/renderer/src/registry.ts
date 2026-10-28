@@ -46,7 +46,7 @@ export const WIDGETS: { [K in WidgetType]: WidgetDefinition<K> } = {
     notify: false,
     notifyMinutes: 10
   })),
-  music: def('Música', 'music', 'Lo que suena en tus apps o tus archivos', { w: 3, h: 9 }, { s: { w: 3, h: 9 }, m: { w: 4, h: 10 }, l: { w: 5, h: 12 } }, () => ({
+  music: def('Multimedia', 'music', 'Música y vídeo de tus apps, o tus archivos de audio', { w: 3, h: 9 }, { s: { w: 3, h: 9 }, m: { w: 4, h: 10 }, l: { w: 5, h: 12 } }, () => ({
     source: 'system',
     tracks: [],
     current: 0,
@@ -55,7 +55,7 @@ export const WIDGETS: { [K in WidgetType]: WidgetDefinition<K> } = {
     shuffle: false,
     repeat: 'off'
   })),
-  web: def('Panel web', 'web', 'Una página dentro de Nido', { w: 3, h: 6 }, { s: { w: 4, h: 8 }, m: { w: 6, h: 11 }, l: { w: 8, h: 15 } }, () => ({
+  web: def('Panel web', 'web', 'Una página dentro de Nido', { w: 4, h: 8 }, { s: { w: 4, h: 8 }, m: { w: 6, h: 11 }, l: { w: 8, h: 15 } }, () => ({
     url: 'https://duckduckgo.com'
   })),
   links: def('Enlaces', 'link', 'Enlaces y grupos que se abren en tu navegador', { w: 3, h: 4 }, { s: { w: 3, h: 5 }, m: { w: 4, h: 7 }, l: { w: 4, h: 10 } }, () => ({

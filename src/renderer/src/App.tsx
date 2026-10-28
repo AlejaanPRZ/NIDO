@@ -7,6 +7,7 @@ import { AppContext, useBrowsers, WorkspaceActiveContext, type AppContextValue, 
 import { Icon } from './icons'
 import { COLLAPSED_H, WIDGETS } from './registry'
 import { SettingsDialog } from './Settings'
+import { resolveMove } from './layoutEngine'
 import { arrange, findWidget, GRID_COLS, useNidoStore, type Action } from './store'
 import { Topbar } from './Topbar'
 import { FeedbackLayer, toast } from './ui/feedback'
@@ -192,7 +193,8 @@ function WorkspaceGrid({
   dispatch,
   onExpand,
   onInteract,
-  onCatalog
+  onCatalog,
+  onMoved
 }: {
   workspace: Workspace
   workspaces: Workspace[]
@@ -204,9 +206,16 @@ function WorkspaceGrid({
   onExpand(id: string | null): void
   onInteract(on: boolean): void
   onCatalog(): void
+  /** Tras mover o redimensionar: distribución anterior y cuántos widgets se recolocaron (para Deshacer). */
+  onMoved(previous: LayoutItem[], displaced: number): void
 }): JSX.Element {
   const wrapper = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
+  // Vista previa mientras se arrastra: dónde acabarán los widgets desplazados (y si el sitio no vale).
+  const [preview, setPreview] = useState<{ items: Layout[]; invalid: boolean } | null>(null)
+  const previewKey = useRef('')
+  // Cambia en cada soltar para que la cuadrícula tome siempre la distribución resuelta (también al revertir).
+  const [rev, setRev] = useState(0)
   const colWidth = (width - MARGIN * (GRID_COLS - 1)) / GRID_COLS
   // Ventana estrecha: 12 columnas dejarían los widgets inservibles, así que se apilan.
   const stacked = width > 0 && width < STACK_BELOW
@@ -244,9 +253,53 @@ function WorkspaceGrid({
   const adapted = !stacked && width > 0 && colWidth < REF_COL - 0.5
   const layout = stacked ? stackLayout(gridLayout) : adapted ? adaptLayout(gridLayout, colWidth) : gridLayout
 
-  /** En modo adaptado solo se guarda el widget que el usuario ha movido o redimensionado. */
-  const saveOne = (item: Layout): void => {
-    dispatch({ type: 'layout', workspace: workspace.id, layout: workspace.layout.map((l) => (l.i === item.i ? { ...l, x: item.x, y: item.y, w: item.w, h: item.h } : l)) })
+  const statics = new Set(workspace.widgets.filter((w) => w.pinned).map((w) => w.id))
+  const cols = stacked ? 1 : GRID_COLS
+
+  /** Distribución pintada si se suelta item aquí (intercambio o recolocación local; null si pisa un fijado). */
+  const resolveDrop = (item: Layout, old: Layout): Layout[] | null => {
+    const moved = { ...old, x: item.x, y: item.y, w: item.w, h: item.h }
+    return resolveMove(layout, moved, statics, cols, { x: old.x, y: old.y, w: old.w, h: old.h }) as Layout[] | null
+  }
+
+  const showPreview = (item: Layout, old: Layout): void => {
+    const key = `${item.i}:${item.x},${item.y},${item.w},${item.h}`
+    if (key === previewKey.current) return
+    previewKey.current = key
+    const resolved = resolveDrop(item, old)
+    // Contorno para cada widget que acabará en otro sitio (incluido el arrastrado, si el intercambio de orden lo recoloca).
+    setPreview(
+      resolved
+        ? { items: resolved.filter((r) => (r.i === item.i ? r.x !== item.x || r.y !== item.y : layout.some((l) => l.i === r.i && (l.x !== r.x || l.y !== r.y)))), invalid: false }
+        : { items: [], invalid: true }
+    )
+  }
+
+  /**
+   * Al soltar: se aplica la misma resolución que mostraba la vista previa y se guarda.
+   * En modo adaptado (columnas estrechas) se guardan las posiciones; los anchos guardados solo
+   * cambian para el widget que el usuario ha redimensionado.
+   */
+  const commit = (item: Layout, old: Layout): void => {
+    previewKey.current = ''
+    setPreview(null)
+    setRev((r) => r + 1)
+    const resolved = resolveDrop(item, old)
+    if (!resolved) {
+      toast('No se puede soltar encima de un widget fijado', 'error')
+      return
+    }
+    const byId = new Map(resolved.map((r) => [r.i, r]))
+    const next = workspace.layout.map((l) => {
+      const r = byId.get(l.i)
+      if (!r) return l
+      const own = l.i === item.i
+      return { ...l, x: r.x, y: r.y, w: own || !adapted ? r.w : l.w, h: own ? r.h : l.h }
+    })
+    const displaced = next.filter((n) => n.i !== item.i && workspace.layout.some((l) => l.i === n.i && (l.x !== n.x || l.y !== n.y))).length
+    const before = workspace.layout
+    dispatch({ type: 'layout', workspace: workspace.id, layout: next })
+    onMoved(before, displaced)
   }
 
   const guides = { '--colw': `${colWidth}px`, '--colstep': `${colWidth + MARGIN}px`, '--rowh': `${ROW_HEIGHT}px`, '--rowstep': `${ROW_HEIGHT + MARGIN}px` } as CSSProperties
@@ -268,9 +321,21 @@ function WorkspaceGrid({
             </button>
           </div>
         )}
+        {preview && (
+          // Contornos de dónde quedarán los widgets desplazados (la vista previa coincide con el resultado).
+          <div className="grid-ghosts" aria-hidden>
+            {preview.items.map((g) => (
+              <div
+                key={g.i}
+                className="grid-ghost"
+                style={{ left: g.x * (colWidth + MARGIN), top: g.y * (ROW_HEIGHT + MARGIN), width: g.w * colWidth + (g.w - 1) * MARGIN, height: g.h * ROW_HEIGHT + (g.h - 1) * MARGIN }}
+              />
+            ))}
+          </div>
+        )}
         <Grid
-          className="grid"
-          layout={layout}
+          className={`grid ${preview?.invalid ? 'drop-invalid' : ''}`}
+          layout={layout.map((l) => ({ ...l, rev }))}
           cols={stacked ? 1 : GRID_COLS}
           rowHeight={ROW_HEIGHT}
           margin={[MARGIN, MARGIN]}
@@ -279,25 +344,26 @@ function WorkspaceGrid({
           draggableCancel=".no-drag"
           isDraggable={!locked && !stacked}
           isResizable={!locked && !stacked}
-          // Colocación libre: el widget se queda donde se suelta (con huecos si hace falta) y solo
-          // desplaza hacia abajo a los que pisa. Con compactación vertical subía solo y deshacía el gesto.
+          // La librería no recoloca nada (ni compacta ni empuja en cadena): mientras se arrastra se permite
+          // solapar y, al soltar, layoutEngine intercambia o recoloca localmente. La vista previa muestra
+          // ese mismo resultado antes de soltar.
           compactType={null}
+          allowOverlap
           preventCollision={false}
           // Sin transform CSS: así un widget ampliado (position: fixed) se coloca respecto a la ventana.
           useCSSTransforms={false}
-          // La distribución apilada es solo de presentación: la guardada no cambia.
-          onLayoutChange={(next) => {
-            if (!stacked && !adapted) dispatch({ type: 'layout', workspace: workspace.id, layout: next })
-          }}
+          // La distribución solo se guarda al soltar (commit); los cambios internos de la librería se ignoran.
           onDragStart={() => onInteract(true)}
-          onDragStop={(_l, _old, item) => {
+          onDrag={(_l, old, item) => showPreview(item, old)}
+          onDragStop={(_l, old, item) => {
             onInteract(false)
-            if (adapted) saveOne(item)
+            commit(item, old)
           }}
           onResizeStart={() => onInteract(true)}
-          onResizeStop={(_l, _old, item) => {
+          onResize={(_l, old, item) => showPreview(item, old)}
+          onResizeStop={(_l, old, item) => {
             onInteract(false)
-            if (adapted) saveOne(item)
+            commit(item, old)
           }}
         >
           {workspace.widgets.map((widget) => (
@@ -443,6 +509,28 @@ export default function App(): JSX.Element {
     })
   }, [state, settings.locked, dispatch])
 
+  /** Deshace el último movimiento u organización (botón del aviso, Ctrl+Z o el buscador). */
+  const undoLast = useCallback(() => {
+    if (!undoLayout) return
+    dispatch({ type: 'layout', workspace: undoLayout.workspace, layout: undoLayout.layout })
+    setUndoLayout(null)
+    toast('Distribución anterior restaurada', 'success')
+  }, [undoLayout, dispatch])
+
+  /** Tras mover o redimensionar: se puede deshacer; si se recolocaron otros, se avisa. */
+  const onMoved = useCallback((workspaceId: string, previous: LayoutItem[], displaced: number) => {
+    setUndoLayout({ workspace: workspaceId, layout: previous })
+    if (displaced > 0) {
+      toast(`Se ${displaced === 1 ? 'ha recolocado 1 widget' : `han recolocado ${displaced} widgets`}`, 'success', {
+        label: 'Deshacer',
+        run: () => {
+          dispatch({ type: 'layout', workspace: workspaceId, layout: previous })
+          setUndoLayout(null)
+        }
+      })
+    }
+  }, [dispatch])
+
   useEscape(() => setExpanded(null), expanded !== null)
 
   // Atajos de teclado globales.
@@ -455,6 +543,12 @@ export default function App(): JSX.Element {
         return
       }
       if (hasOpenLayer() && !paletteOpen) return
+      const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"]')
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing && undoLayout) {
+        e.preventDefault()
+        undoLast()
+        return
+      }
       if (mod && e.key === ',') {
         e.preventDefault()
         setSettingsSection('general')
@@ -480,7 +574,7 @@ export default function App(): JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatch, state.settings.locked, state.workspaces, paletteOpen, showWelcome])
+  }, [dispatch, state.settings.locked, state.workspaces, paletteOpen, showWelcome, undoLayout, undoLast])
 
   const context = useMemo<AppContextValue>(
     () => ({
@@ -528,6 +622,7 @@ export default function App(): JSX.Element {
                   onExpand={setExpanded}
                   onInteract={setInteracting}
                   onCatalog={() => setCatalogOpen(true)}
+                  onMoved={(previous, displaced) => onMoved(ws.id, previous, displaced)}
                 />
               ))}
           </div>
@@ -543,14 +638,7 @@ export default function App(): JSX.Element {
           onShowWelcome={showWelcome}
           onCatalog={() => setCatalogOpen(true)}
           onArrange={arrangeActive}
-          onUndoArrange={
-            undoLayout
-              ? () => {
-                  dispatch({ type: 'layout', workspace: undoLayout.workspace, layout: undoLayout.layout })
-                  setUndoLayout(null)
-                }
-              : undefined
-          }
+          onUndoArrange={undoLayout ? undoLast : undefined}
         />
       )}
       {catalogOpen && (

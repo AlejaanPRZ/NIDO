@@ -148,7 +148,7 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
             <input
               className="input tiny mono"
               autoFocus
-              aria-label="Ir al minuto"
+              aria-label="Ir a un minuto y segundo (mm:ss)"
               placeholder="02:35"
               value={jumpText}
               onChange={(e) => {
@@ -165,7 +165,8 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
         ) : canSeek ? (
           <button
             className="time-btn mono"
-            title="Ir a un minuto concreto"
+            title="Ir a un minuto y segundo concretos (mm:ss)"
+            aria-label={`Posición ${formatTime(shown)}. Ir a un minuto y segundo concretos`}
             onClick={() => {
               setJumpText(formatTime(p.position))
               setJumping(true)

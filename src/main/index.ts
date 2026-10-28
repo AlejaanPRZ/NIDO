@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, session, shell } from 'electron'
 import { join } from 'node:path'
 import { APP_ID, IPC, type AppState } from '../shared/types'
 import { registerBrowsers } from './browsers'
@@ -149,6 +149,10 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   app.setAppUserModelId(APP_ID)
+  // Los paneles web se presentan como el Chrome en que se basan, sin «Electron/…» ni «nido/…»:
+  // con esas marcas, algunos servicios (Teams, Outlook…) responden «navegador no compatible».
+  const web = session.fromPartition('persist:nido-web')
+  web.setUserAgent(web.getUserAgent().replace(/\s(?:Electron|nido|Nido)\/\S+/g, ''))
   handleMediaProtocol()
   createWindow()
   app.on('activate', () => {

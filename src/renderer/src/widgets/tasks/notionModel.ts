@@ -88,6 +88,8 @@ export interface NotionTask {
   date: { start: string; end?: string | null } | null
   priority: string | null
   tags: string[]
+  /** Valores tal como vinieron de Notion (para detectar cambios ajenos al guardar) */
+  raw: Record<string, NotionValue>
 }
 
 export function toTask(page: NotionPage, config: NotionTaskConfig, schema: NotionSchema): NotionTask {
@@ -111,6 +113,7 @@ export function toTask(page: NotionPage, config: NotionTaskConfig, schema: Notio
   return {
     id: page.id,
     url: page.url,
+    raw: page.properties,
     title: title?.type === 'title' ? title.value : '',
     status: statusName,
     done,

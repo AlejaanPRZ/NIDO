@@ -1,5 +1,6 @@
 import type { WidgetDataMap, WidgetType } from '../../shared/types'
 import type { IconName } from './icons'
+import type { SizeName } from './registry'
 
 // Catálogo de widgets. Cada entrada declara con honestidad cómo funciona:
 //   local    → funciona en este equipo, sin cuenta
@@ -46,6 +47,8 @@ export interface CatalogEntry {
   icon: IconName
   /** Logo oficial del servicio (brands/), si es una marca real; si no, se usa icon */
   brand?: string
+  /** Tamaño con el que se propone añadirlo (por defecto M) */
+  size?: SizeName
   /** Color del icono en la tarjeta */
   tint: string
   mode: CatalogMode
@@ -94,7 +97,8 @@ const web = (
   account,
   status: 'disponible',
   widget: 'web',
-  data: { url },
+  // Las apps web empiezan con la barra de dirección plegada: la navegación va en la cabecera.
+  data: { url, bar: false },
   widgetTitle: title,
   note
 })
@@ -165,8 +169,8 @@ export const CATALOG: CatalogEntry[] = [
   { id: 'launcher', title: 'Aplicaciones y carpetas', description: 'Accesos a programas, carpetas y documentos que elijas.', category: 'notas', icon: 'apps', tint: C.indigo, mode: 'local', account: false, status: 'disponible', widget: 'launcher' },
   { id: 'recent', title: 'Recientes', description: 'Lo que has abierto desde Nido. No lee el historial de Windows.', category: 'notas', icon: 'clock', tint: C.gray, mode: 'local', account: false, status: 'disponible', widget: 'recent' },
   { id: 'images', title: 'Imágenes', description: 'Pase de fotos de una carpeta de tu equipo.', category: 'notas', icon: 'image', tint: C.teal, mode: 'local', account: false, status: 'disponible', widget: 'images' },
-  web('drive-web', 'Google Drive (web)', 'https://drive.google.com', 'notas', 'folder', '#1fa463', 'Tu Drive en un panel integrado.', GOOGLE_LOGIN),
-  web('onedrive-web', 'OneDrive (web)', 'https://onedrive.live.com', 'notas', 'cloud', '#0078d4', 'Tus archivos de OneDrive en un panel integrado.', MS_LOGIN),
+  web('drive-web', 'Google Drive (web)', 'https://drive.google.com/drive/my-drive', 'notas', 'folder', '#1fa463', 'Tu Drive en un panel integrado.', GOOGLE_LOGIN),
+  web('onedrive-web', 'OneDrive (web)', 'https://onedrive.live.com/?id=root', 'notas', 'cloud', '#0078d4', 'Tus archivos de OneDrive en un panel integrado.', MS_LOGIN),
   web('dropbox-web', 'Dropbox (web)', 'https://www.dropbox.com/home', 'notas', 'package', '#0061ff', 'Tus archivos de Dropbox en un panel integrado.'),
   soon('drive', 'Google Drive', 'notas', 'folder', '#1fa463', 'Archivos recientes y búsqueda en Drive con su API.'),
   soon('onedrive', 'OneDrive', 'notas', 'cloud', '#0078d4', 'Archivos de OneDrive con Microsoft Graph.'),
@@ -187,7 +191,7 @@ export const CATALOG: CatalogEntry[] = [
     status: 'disponible',
     widget: 'music',
     data: { source: 'system' },
-    widgetTitle: 'Ahora suena'
+    widgetTitle: 'Multimedia'
   },
   {
     id: 'local-music',
@@ -209,13 +213,13 @@ export const CATALOG: CatalogEntry[] = [
   soon('spotify', 'Spotify (API)', 'musica', 'music', '#1db954', 'Biblioteca y listas de Spotify con su API oficial.'),
 
   // ---------- Comunicación ----------
-  web('gmail', 'Gmail', 'https://mail.google.com', 'comunicacion', 'mail', '#ea4335', 'Tu correo de Gmail en un panel integrado.', GOOGLE_LOGIN),
-  web('outlook-mail', 'Outlook (web)', 'https://outlook.live.com/mail', 'comunicacion', 'mail', '#0078d4', 'Correo de Outlook en un panel integrado.', MS_LOGIN),
+  web('gmail', 'Gmail', 'https://mail.google.com/mail/u/0/', 'comunicacion', 'mail', '#ea4335', 'Tu correo de Gmail en un panel integrado.', GOOGLE_LOGIN),
+  web('outlook-mail', 'Outlook (web)', 'https://outlook.live.com/mail/0/', 'comunicacion', 'mail', '#0078d4', 'Correo de Outlook en un panel integrado.', MS_LOGIN),
   web('whatsapp', 'WhatsApp Web', 'https://web.whatsapp.com', 'comunicacion', 'chat', '#25d366', 'WhatsApp Web; se vincula con el código QR del móvil.', 'Si WhatsApp no admite el panel, usa «Abrir fuera».'),
   web('telegram', 'Telegram Web', 'https://web.telegram.org', 'comunicacion', 'chat', '#26a5e4', 'Telegram en un panel integrado.'),
   web('discord', 'Discord', 'https://discord.com/app', 'comunicacion', 'chat', '#5865f2', 'Discord en un panel integrado.'),
   web('slack', 'Slack', 'https://app.slack.com/client', 'comunicacion', 'chat', '#4a154b', 'Slack en un panel integrado.'),
-  web('teams', 'Microsoft Teams', 'https://teams.microsoft.com', 'comunicacion', 'chat', '#5059c9', 'Teams en un panel integrado.', MS_LOGIN),
+  web('teams', 'Microsoft Teams', 'https://teams.microsoft.com/v2/', 'comunicacion', 'chat', '#5059c9', 'Teams en un panel integrado.', MS_LOGIN),
   soon('gmail-native', 'Gmail (bandeja nativa)', 'comunicacion', 'mail', '#ea4335', 'Correos sin leer con la API de Gmail.'),
   soon('slack-native', 'Slack (nativo)', 'comunicacion', 'chat', '#4a154b', 'Menciones y mensajes con la API de Slack.'),
 
@@ -276,6 +280,12 @@ const BRAND_BY_ID: Record<string, string> = {
   gemini: 'gemini',
   perplexity: 'perplexity'
 }
-for (const entry of CATALOG) entry.brand ??= BRAND_BY_ID[entry.id]
+// Los que necesitan configurarse antes de mostrar algo empiezan compactos: una tarjeta con su acción.
+// Una vez configurados, se amplían desde el menú ⋯ (Tamaño o «Ajustar al contenido»).
+const START_COMPACT = new Set(['google-calendar', 'notion-tasks', 'launcher', 'images', 'rss', 'radio', 'weather', 'recent', 'holidays'])
+for (const entry of CATALOG) {
+  entry.brand ??= BRAND_BY_ID[entry.id]
+  if (START_COMPACT.has(entry.id)) entry.size ??= 's'
+}
 
 export const catalogById =(id: string | undefined): CatalogEntry | undefined => CATALOG.find((e) => e.id === id)

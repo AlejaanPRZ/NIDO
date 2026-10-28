@@ -12,7 +12,8 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "build": "npm run typecheck && electron-vite build",
-    "dist": "npm run build && electron-builder --win"
+    "dist": "npm run build && electron-builder --win",
+    "oauth": "node scripts/oauth-setup.mjs"
   },
   "build": {
     "appId": "app.nido.desktop",

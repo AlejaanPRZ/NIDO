@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrandLogo } from '../../BrandLogo'
-import type { NotionSchema, NotionStatus, NotionTaskConfig, NotionValue, TaskFilters } from '../../../../shared/types'
+import type { ErrorCode, NotionPage, NotionSchema, NotionStatus, NotionTaskConfig, NotionValue, Result, TaskFilters } from '../../../../shared/types'
 import { publishSearchItems, useActive, useApp, useInterval } from '../../context'
 import { Icon } from '../../icons'
 import { EmptyState, Spinner } from '../../ui/controls'
+import { toast } from '../../ui/feedback'
+import { MenuButton, type MenuItem } from '../../ui/Menu'
 import { Modal } from '../../ui/Modal'
 import { fromDateKey } from '../../util'
 import { INTEGRATIONS_EVENT } from '../calendar/useGoogleCalendar'
@@ -20,14 +22,14 @@ import {
 } from './notionModel'
 import { NotionSetup } from './NotionSetup'
 
-const REFRESH_MS = 2 * 60_000
+const REFRESH_MS = 60_000
 const dateLabel = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
 const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 
 interface FailedOp {
   label: string
   error: string
-  retry(): Promise<void>
+  retry?(): Promise<void>
 }
 
 export function NotionTasks({ widget, update }: WidgetProps<'tasks'>): JSX.Element {
@@ -105,39 +107,54 @@ function NotionList({
   onConfigure(): void
   onAuthError(): void
 }): JSX.Element {
+  const { openSettings } = useApp()
   const [schema, setSchema] = useState<NotionSchema | null>(null)
   const [tasks, setTasks] = useState<NotionTask[] | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<{ message: string; code: ErrorCode } | null>(null)
   const [lastSync, setLastSync] = useState<Date | null>(null)
   const [failed, setFailed] = useState<FailedOp | null>(null)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<NotionTask | null>(null)
   const busy = useRef(false)
+  const again = useRef(false)
+  // Tareas recién creadas desde Nido: Notion puede tardar unos segundos en incluirlas en las
+  // consultas; mientras, se conservan (con lo que devolvió Notion al crearlas) para que no «desaparezcan».
+  const created = useRef(new Map<string, { at: number; task: NotionTask }>())
 
   const load = useCallback(async () => {
-    if (busy.current) return
-    busy.current = true
-    setSyncing(true)
-    const [s, q] = await Promise.all([
-      window.nido.notion.schema(config.dataSourceId),
-      window.nido.notion.query(config.dataSourceId)
-    ])
-    busy.current = false
-    setSyncing(false)
-    if (!s.ok || !q.ok) {
-      const failure = !s.ok ? s : !q.ok ? q : null
-      setLoadError(failure?.error ?? 'Error desconocido')
-      if (failure?.code === 'auth') onAuthError()
+    // Si ya hay una carga en curso, se repite al terminar (así un cambio recién guardado nunca se pierde).
+    if (busy.current) {
+      again.current = true
       return
     }
-    setSchema(s.data)
-    setTasks(q.data.map((p) => toTask(p, config, s.data)))
-    setLoadError(null)
-    setLastSync(new Date())
+    busy.current = true
+    setSyncing(true)
+    do {
+      again.current = false
+      const [s, q] = await Promise.all([window.nido.notion.schema(config.dataSourceId), window.nido.notion.query(config.dataSourceId)])
+      if (!s.ok || !q.ok) {
+        const failure = (!s.ok ? s : q) as { error: string; code: ErrorCode }
+        setLoadError({ message: failure.error, code: failure.code })
+        if (failure.code === 'auth') onAuthError()
+        continue
+      }
+      const fresh = q.data.map((p) => toTask(p, config, s.data))
+      const ids = new Set(fresh.map((t) => t.id))
+      for (const [id, entry] of created.current) {
+        if (ids.has(id) || Date.now() - entry.at > 20_000) created.current.delete(id)
+        else fresh.unshift(entry.task)
+      }
+      setSchema(s.data)
+      setTasks(fresh)
+      setLoadError(null)
+      setLastSync(new Date())
+    } while (again.current)
+    busy.current = false
+    setSyncing(false)
   }, [config, onAuthError])
 
-  // Solo se consulta mientras el widget se ve; al volver a verse se recarga.
+  // Al abrirse y cada minuto mientras el widget se ve (Notion admite ~3 peticiones por segundo).
   useInterval(() => void load(), REFRESH_MS, useActive())
 
   useEffect(() => {
@@ -148,25 +165,44 @@ function NotionList({
     return () => publishSearchItems(widgetId, null)
   }, [tasks, widgetId, config.name])
 
-  /** Ejecuta un cambio en Notion; si falla, queda pendiente con «Reintentar». */
-  const run = async (label: string, op: () => Promise<{ ok: boolean; error?: string; code?: string }>): Promise<boolean> => {
+  /** Ejecuta un cambio en Notion. Si sale bien, aplica lo que devolvió Notion y recarga; si no, queda «Reintentar». */
+  const run = async (label: string, op: () => Promise<Result<NotionPage>>, onSaved?: (page: NotionPage) => void): Promise<boolean> => {
     setSyncing(true)
     const result = await op()
     setSyncing(false)
     if (result.ok) {
       setFailed(null)
+      onSaved?.(result.data)
+      void load()
       return true
     }
     if (result.code === 'auth') onAuthError()
     setFailed({
       label,
-      error: result.error ?? 'Error desconocido',
-      retry: async () => {
-        if (await run(label, op)) void load()
-      }
+      error: result.error,
+      // Un conflicto no se reintenta igual: hay que ver primero lo que cambió en Notion.
+      retry: result.code === 'conflict' ? undefined : async () => void (await run(label, op, onSaved))
     })
     void load() // vuelve al estado real de Notion
     return false
+  }
+
+  const replace = (page: NotionPage): void => {
+    if (!schema) return
+    const task = toTask(page, config, schema)
+    setTasks((list) => list?.map((t) => (t.id === task.id ? task : t)) ?? null)
+  }
+
+  const checkAccess = async (): Promise<void> => {
+    const r = await window.nido.notion.check(config.dataSourceId)
+    if (!r.ok) {
+      toast(`Notion: ${r.error}`, 'error')
+      if (r.code === 'auth') onAuthError()
+      return
+    }
+    const { sources, readable, pages, workspace } = r.data
+    if (readable === false) toast(`Nido ve ${sources} base${sources === 1 ? '' : 's'} de datos en «${workspace ?? 'Notion'}», pero no «${config.name}». Compártela con la conexión de Nido.`, 'error')
+    else toast(`Acceso correcto a «${config.name}»: ${pages ?? 0} tarea${pages === 1 ? '' : 's'}. ${sources} base${sources === 1 ? '' : 's'} de datos visibles.`, 'success')
   }
 
   const missing = (['status', 'date', 'priority', 'tags'] as const).filter(
@@ -186,13 +222,12 @@ function NotionList({
   )
 
   const toggleDone = (task: NotionTask): void => {
-    if (!schema) return
+    if (!schema || !config.map.status) return
     const value = doneValueFor(config, schema, !task.done)
-    if (!value || !config.map.status) return
+    if (!value) return
     setTasks((list) => list?.map((t) => (t.id === task.id ? { ...t, done: !task.done } : t)) ?? null)
-    void run(`${task.done ? 'reabrir' : 'completar'} «${task.title}»`, () =>
-      window.nido.notion.update(task.id, { [config.map.status!]: value })
-    )
+    const before = task.raw[config.map.status] ? { [config.map.status]: task.raw[config.map.status] } : undefined
+    void run(`${task.done ? 'reabrir' : 'completar'} «${task.title}»`, () => window.nido.notion.update(task.id, { [config.map.status!]: value }, before), replace)
   }
 
   const create = async (): Promise<void> => {
@@ -204,20 +239,56 @@ function NotionList({
       values[config.map.status] = undone
     }
     setDraft('')
-    if (await run(`crear «${title}»`, () => window.nido.notion.create(config.dataSourceId, values))) void load()
+    const ok = await run(`crear «${title}»`, () => window.nido.notion.create(config.dataSourceId, values), (page) => {
+      const task = toTask(page, config, schema)
+      created.current.set(task.id, { at: Date.now(), task })
+      setTasks((list) => (list ? [task, ...list.filter((t) => t.id !== task.id)] : [task]))
+    })
+    if (!ok) setDraft(title) // no se pierde lo escrito
   }
 
+  const menu = (): MenuItem[] => [
+    { label: 'Actualizar', icon: 'reload', disabled: syncing, onSelect: () => void load() },
+    { label: 'Comprobar acceso', icon: 'check', onSelect: () => void checkAccess() },
+    { label: 'Cambiar base de datos o propiedades', icon: 'database', onSelect: onConfigure },
+    { separator: true },
+    { label: 'Reconectar Notion', icon: 'link', onSelect: () => openSettings('conexiones') }
+  ]
+
   if (!tasks && !loadError) return <EmptyState icon={<Spinner />} title="Cargando tareas de Notion…" />
+
+  // La consulta falló y no hay datos anteriores: se dice el error, nunca «Sin tareas».
+  if (!tasks && loadError) {
+    return (
+      <EmptyState
+        icon={<BrandLogo brand="notion" name="Notion" size={28} decorative />}
+        title={loadError.code === 'network' ? 'Sin conexión con Notion' : loadError.code === 'notfound' ? 'Nido no ve esta base de datos' : 'No se pudieron cargar las tareas'}
+        action={
+          <div className="row center wrap">
+            <button className="btn small primary" onClick={() => void load()}>
+              Reintentar
+            </button>
+            {loadError.code === 'auth' ? (
+              <button className="btn small" onClick={() => openSettings('conexiones')}>
+                Reconectar
+              </button>
+            ) : (
+              <button className="btn small" onClick={loadError.code === 'notfound' ? onConfigure : () => void checkAccess()}>
+                {loadError.code === 'notfound' ? 'Elegir otra' : 'Comprobar acceso'}
+              </button>
+            )}
+          </div>
+        }
+      >
+        {loadError.message}
+      </EmptyState>
+    )
+  }
 
   return (
     <div className="tasks-notion">
       <div className="filters">
-        <select
-          className="chip-select"
-          aria-label="Filtrar por estado"
-          value={filters.status}
-          onChange={(e) => onFilters({ ...filters, status: e.target.value })}
-        >
+        <select className="chip-select" aria-label="Filtrar por estado" value={filters.status} onChange={(e) => onFilters({ ...filters, status: e.target.value })}>
           <option value="open">Pendientes</option>
           <option value="done">Completadas</option>
           <option value="all">Todas</option>
@@ -232,12 +303,7 @@ function NotionList({
           )}
         </select>
         {priorityProp && (
-          <select
-            className="chip-select"
-            aria-label="Filtrar por prioridad"
-            value={filters.priority}
-            onChange={(e) => onFilters({ ...filters, priority: e.target.value })}
-          >
+          <select className="chip-select" aria-label="Filtrar por prioridad" value={filters.priority} onChange={(e) => onFilters({ ...filters, priority: e.target.value })}>
             <option value="all">Cualquier prioridad</option>
             {(priorityProp.options ?? []).map((o) => (
               <option key={o.name} value={o.name}>
@@ -247,12 +313,7 @@ function NotionList({
           </select>
         )}
         {config.map.date && (
-          <select
-            className="chip-select"
-            aria-label="Filtrar por vencimiento"
-            value={filters.due}
-            onChange={(e) => onFilters({ ...filters, due: e.target.value as TaskFilters['due'] })}
-          >
+          <select className="chip-select" aria-label="Filtrar por vencimiento" value={filters.due} onChange={(e) => onFilters({ ...filters, due: e.target.value as TaskFilters['due'] })}>
             <option value="all">Cualquier fecha</option>
             <option value="overdue">Vencidas</option>
             <option value="today">Para hoy</option>
@@ -269,8 +330,8 @@ function NotionList({
           void create()
         }}
       >
-        <input className="input grow" value={draft} placeholder={`Nueva tarea en ${config.name}`} onChange={(e) => setDraft(e.target.value)} />
-        <button className="btn primary small" type="submit" disabled={!draft.trim() || !schema}>
+        <input className="input grow" value={draft} aria-label="Nueva tarea" placeholder={`Nueva tarea en ${config.name}`} onChange={(e) => setDraft(e.target.value)} />
+        <button className="btn primary small" type="submit" disabled={!draft.trim() || !schema} title="Crear en Notion" aria-label="Crear en Notion">
           <Icon name="plus" size={13} />
         </button>
       </form>
@@ -286,13 +347,13 @@ function NotionList({
       )}
 
       <ul className="list scroll">
-        {visible.length === 0 && <li className="empty muted">{tasks?.length ? 'Ninguna tarea con estos filtros.' : 'Sin tareas.'}</li>}
+        {visible.length === 0 && <li className="empty muted">{tasks?.length ? 'Ninguna tarea con estos filtros.' : `«${config.name}» no tiene tareas todavía.`}</li>}
         {visible.map((t) => {
           const bucket = dueBucket(t.date, t.done)
           return (
             <li key={t.id} className={`task ${t.done ? 'done' : ''}`}>
               {canComplete ? (
-                <input type="checkbox" checked={t.done} aria-label="Completada" onChange={() => toggleDone(t)} />
+                <input type="checkbox" checked={t.done} aria-label={`Completada: ${t.title}`} onChange={() => toggleDone(t)} />
               ) : (
                 <span className="task-bullet" />
               )}
@@ -301,9 +362,7 @@ function NotionList({
                 <span className="task-meta">
                   {t.status && !t.done && statusProp?.type !== 'checkbox' && <span className="tag">{t.status}</span>}
                   {t.priority && <span className="tag strong">{t.priority}</span>}
-                  {t.date?.start && (
-                    <span className={`tag date ${bucket}`}>{dateLabel.format(fromDateKey(t.date.start.slice(0, 10)))}</span>
-                  )}
+                  {t.date?.start && <span className={`tag date ${bucket}`}>{dateLabel.format(fromDateKey(t.date.start.slice(0, 10)))}</span>}
                   {t.tags.map((tag) => (
                     <span key={tag} className="tag soft">
                       {tag}
@@ -317,26 +376,28 @@ function NotionList({
       </ul>
 
       {failed && (
-        <div className="sync-error">
+        <div className="sync-error" role="alert">
           <Icon name="alert" size={13} />
           <span className="grow">
             No se pudo {failed.label}: {failed.error}
           </span>
-          <button className="link-btn" onClick={() => void failed.retry()}>
-            Reintentar
-          </button>
-          <button className="icon-btn small" title="Descartar" onClick={() => setFailed(null)}>
+          {failed.retry && (
+            <button className="link-btn" onClick={() => void failed.retry?.()}>
+              Reintentar
+            </button>
+          )}
+          <button className="icon-btn small" title="Descartar" aria-label="Descartar" onClick={() => setFailed(null)}>
             <Icon name="close" size={11} />
           </button>
         </div>
       )}
 
-      <div className="sync-line">
+      <div className="sync-line" aria-live="polite">
         {loadError ? (
           <>
             <Icon name="alert" size={13} />
-            <span className="grow error-text" title={loadError}>
-              {loadError}
+            <span className="grow error-text" title={loadError.message}>
+              {loadError.code === 'network' ? 'Sin conexión: mostrando lo último cargado' : loadError.message}
             </span>
             <button className="link-btn" onClick={() => void load()}>
               Reintentar
@@ -344,18 +405,16 @@ function NotionList({
           </>
         ) : (
           <>
-            {syncing ? <Spinner size={11} /> : <Icon name="cloud" size={13} />}
-            <span className="grow">
-              {syncing ? 'Sincronizando…' : lastSync ? `Notion · ${clock.format(lastSync)}` : 'Notion'}
-            </span>
+            {syncing ? <Spinner size={11} /> : <BrandLogo brand="notion" name="" size={14} decorative className="bare" />}
+            <span className="grow ellipsis">{syncing ? 'Actualizando…' : lastSync ? `Actualizado a las ${clock.format(lastSync)}` : 'Notion'}</span>
           </>
         )}
-        <button className="icon-btn small" title="Actualizar" disabled={syncing} onClick={() => void load()}>
+        <button className="icon-btn small" title="Actualizar" aria-label="Actualizar" disabled={syncing} onClick={() => void load()}>
           <Icon name="reload" size={12} />
         </button>
-        <button className="icon-btn small" title="Base de datos y propiedades" onClick={onConfigure}>
-          <Icon name="settings" size={12} />
-        </button>
+        <MenuButton items={menu} title="Opciones de Notion" className="icon-btn small">
+          <Icon name="more" size={13} />
+        </MenuButton>
       </div>
 
       {editing && schema && (
@@ -364,10 +423,10 @@ function NotionList({
           config={config}
           schema={schema}
           onClose={() => setEditing(null)}
-          onSave={async (values) => {
-            const ok = await run(`guardar «${editing.title}»`, () => window.nido.notion.update(editing.id, values))
-            if (ok) void load()
-            return ok
+          onSave={(values) => {
+            // Lo que había al abrir el editor, para no pisar cambios hechos en Notion entretanto.
+            const before = Object.fromEntries(Object.keys(values).map((name) => [name, editing.raw[name]]).filter(([, v]) => v !== undefined))
+            return run(`guardar «${editing.title}»`, () => window.nido.notion.update(editing.id, values, before), replace)
           }}
         />
       )}

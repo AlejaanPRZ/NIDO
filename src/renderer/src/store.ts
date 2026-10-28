@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState, type Dispatch } from 'react'
 import type { AppState, LayoutItem, Settings, Widget, WidgetDataMap, WidgetType, Workspace } from '../../shared/types'
+import { resolveOverlaps, settle } from './layoutEngine'
 import { COLLAPSED_H, WIDGETS, WIDGET_TYPES, type SizeName } from './registry'
 import { uid } from './util'
 
@@ -114,24 +115,38 @@ export function defaultSettings(): Settings {
   }
 }
 
-function placed(widgets: Widget[]): Workspace['layout'] {
-  return arrange({ id: '', name: '', icon: '', color: '', widgets, layout: widgets.map((w, i) => ({ i: w.id, x: 0, y: i * 100, ...sizeOf(w.type, 'm') })) })
-}
-
 const sizeOf = (type: WidgetType, size: SizeName): { w: number; h: number } => WIDGETS[type].sizes[size]
 
 export function defaultState(): AppState {
-  // Un primer escritorio útil y compacto, sin superficies vacías enormes.
-  const content: Record<string, [WidgetType, Partial<WidgetDataMap[WidgetType]>?][]> = {
-    trabajo: [['tasks'], ['calendar', { view: 'agenda' }], ['pomodoro'], ['notes']],
-    personal: [['notes'], ['tasks'], ['music'], ['weather'], ['calendar'], ['links']],
-    estudio: [['pomodoro'], ['notes'], ['tasks'], ['timer']]
+  // Primer escritorio equilibrado: tres columnas de 4 que acaban a la misma altura, sin huecos.
+  type Slot = [WidgetType, x: number, y: number, w: number, h: number, data?: Partial<WidgetDataMap[WidgetType]>]
+  const content: Record<string, Slot[]> = {
+    trabajo: [
+      ['calendar', 0, 0, 4, 12, { view: 'agenda' }],
+      ['tasks', 4, 0, 4, 12],
+      ['pomodoro', 8, 0, 4, 6],
+      ['notes', 8, 6, 4, 6]
+    ],
+    personal: [
+      ['calendar', 0, 0, 4, 11],
+      ['weather', 0, 11, 4, 5],
+      ['tasks', 4, 0, 4, 9],
+      ['notes', 4, 9, 4, 7],
+      ['music', 8, 0, 4, 9],
+      ['links', 8, 9, 4, 7]
+    ],
+    estudio: [
+      ['pomodoro', 0, 0, 4, 6],
+      ['timer', 0, 6, 4, 6],
+      ['notes', 4, 0, 4, 12],
+      ['tasks', 8, 0, 4, 12]
+    ]
   }
   return {
     version: 3,
-    workspaces: DEFAULT_WORKSPACES.map((w) => {
-      const widgets = content[w.id].map(([type, data]) => makeWidget(type, data))
-      return { ...w, widgets, layout: placed(widgets) }
+    workspaces: DEFAULT_WORKSPACES.map((ws) => {
+      const slots = content[ws.id].map(([type, x, y, w, h, data]) => ({ widget: makeWidget(type, data), x, y, w, h }))
+      return { ...ws, widgets: slots.map((s) => s.widget), layout: slots.map(({ widget, x, y, w, h }) => ({ i: widget.id, x, y, w, h })) }
     }),
     activeWorkspace: 'personal',
     settings: defaultSettings()
@@ -157,14 +172,22 @@ function sanitizeWorkspace(ws: any, index: number): Workspace {
   for (const w of widgets) {
     if (!layout.some((l) => l.i === w.id)) layout.push({ i: w.id, x: 0, y: bottomOf(layout), ...sizeOf(w.type, 'm') })
   }
+  // Con la lógica actual la cuadrícula no recoloca nada sola: los solapes heredados se corrigen al cargar.
+  const statics = new Set<string>(widgets.filter((w: Widget) => w.pinned).map((w: Widget) => w.id))
   return {
     id: String(ws.id || uid()),
     name: String(ws.name || fallback.name),
     icon: String(ws.icon || fallback.icon),
     color: String(ws.color || fallback.color),
     widgets,
-    layout
+    layout: resolveOverlaps(layout, statics, GRID_COLS)
   }
+}
+
+/** Tras cambiar el tamaño o añadir un widget: los que pisa se recolocan cerca (sin solapes). */
+function settleIn(ws: Workspace, id: string): Workspace {
+  const statics = new Set(ws.widgets.filter((w) => w.pinned && w.id !== id).map((w) => w.id))
+  return { ...ws, layout: settle(ws.layout, id, statics, GRID_COLS) }
 }
 
 function sanitize(raw: any): AppState {
@@ -279,27 +302,30 @@ function reducer(state: AppState, action: Action): AppState {
       const copy = { ...structuredClone(found.widget), id: uid(), title: `${found.widget.title} (copia)`, pinned: false }
       const source = found.workspace.layout.find((l) => l.i === action.id)
       const item = source ? { ...source, i: copy.id, y: source.y + source.h } : { i: copy.id, x: 0, y: bottomOf(found.workspace.layout), ...sizeOf(copy.type, 'm') }
-      return updateWorkspace(state, found.workspace.id, (ws) => ({
-        ...ws,
-        widgets: [...ws.widgets, copy],
-        layout: [...ws.layout, { i: item.i, x: item.x, y: item.y, w: item.w, h: item.h }]
-      }))
+      return updateWorkspace(state, found.workspace.id, (ws) =>
+        settleIn({ ...ws, widgets: [...ws.widgets, copy], layout: [...ws.layout, { i: item.i, x: item.x, y: item.y, w: item.w, h: item.h }] }, copy.id)
+      )
     }
     case 'collapse': {
       const found = findWidget(state, action.id)
       if (!found || !!found.widget.collapsed === action.collapsed) return state
       const current = found.workspace.layout.find((l) => l.i === action.id)
-      return updateWorkspace(state, found.workspace.id, (ws) => ({
-        ...ws,
-        widgets: ws.widgets.map((w) =>
-          w.id === action.id ? { ...w, collapsed: action.collapsed, restoreH: action.collapsed ? current?.h : undefined } : w
-        ),
-        layout: ws.layout.map((l) =>
-          l.i === action.id
-            ? { ...l, h: action.collapsed ? COLLAPSED_H : (found.widget.restoreH ?? WIDGETS[found.widget.type].size.h) }
-            : l
+      return updateWorkspace(state, found.workspace.id, (ws) =>
+        settleIn(
+          {
+            ...ws,
+            widgets: ws.widgets.map((w) =>
+              w.id === action.id ? { ...w, collapsed: action.collapsed, restoreH: action.collapsed ? current?.h : undefined } : w
+            ),
+            layout: ws.layout.map((l) =>
+              l.i === action.id
+                ? { ...l, h: action.collapsed ? COLLAPSED_H : (found.widget.restoreH ?? WIDGETS[found.widget.type].size.h) }
+                : l
+            )
+          },
+          action.id
         )
-      }))
+      )
     }
     case 'move': {
       const found = findWidget(state, action.id)
@@ -323,12 +349,13 @@ function reducer(state: AppState, action: Action): AppState {
       if (!found) return state
       const min = WIDGETS[found.widget.type].size
       const collapsedOff = updateWidget(state, action.id, (w) => ({ ...w, collapsed: false, restoreH: undefined }))
-      return updateLayoutItem(collapsedOff, action.id, (l) => ({
+      const resized = updateLayoutItem(collapsedOff, action.id, (l) => ({
         ...l,
         w: Math.min(GRID_COLS, Math.max(min.minW, action.w)),
         h: Math.max(min.minH, action.h),
         x: Math.min(l.x, GRID_COLS - Math.min(GRID_COLS, Math.max(min.minW, action.w)))
       }))
+      return updateWorkspace(resized, found.workspace.id, (ws) => settleIn(ws, action.id))
     }
     case 'pin':
       return updateWidget(state, action.id, (w) => ({ ...w, pinned: action.pinned }))

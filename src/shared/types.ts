@@ -118,6 +118,8 @@ export interface MusicData {
 
 export interface WebData {
   url: string
+  /** Barra de dirección de Nido visible (si no, la navegación va en la cabecera del widget) */
+  bar?: boolean
 }
 
 export interface LinkItem {
@@ -351,7 +353,7 @@ export interface ExportFile {
 
 // ---------- Resultado de llamadas al proceso principal ----------
 
-export type ErrorCode = 'config' | 'auth' | 'cancelled' | 'network' | 'notfound' | 'forbidden' | 'rate' | 'invalid' | 'unknown'
+export type ErrorCode = 'config' | 'auth' | 'cancelled' | 'conflict' | 'network' | 'notfound' | 'forbidden' | 'rate' | 'invalid' | 'unknown'
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string; code: ErrorCode }
 
@@ -368,6 +370,8 @@ export interface MediaSession {
   artist: string
   album: string
   status: MediaStatus
+  /** Tipo de contenido que declara la app; algunas no lo dicen (Unknown) */
+  kind?: 'Music' | 'Video' | 'Image' | 'Unknown'
   canToggle: boolean
   canNext: boolean
   canPrev: boolean
@@ -531,7 +535,20 @@ export type NotionValue =
 export interface NotionPage {
   id: string
   url: string
+  /** Última edición en Notion (ISO; Notion la redondea al minuto) */
+  lastEdited?: string
   properties: Record<string, NotionValue>
+}
+
+/** Resultado de «Comprobar acceso». */
+export interface NotionAccess {
+  workspace?: string
+  /** Bases de datos (fuentes de datos) que la conexión puede ver */
+  sources: number
+  /** La base de datos elegida se puede leer (si se indicó) */
+  readable?: boolean
+  /** Tareas que devuelve esa base de datos */
+  pages?: number
 }
 
 export interface NotionApi {
@@ -545,7 +562,13 @@ export interface NotionApi {
   schema(dataSourceId: string): Promise<Result<NotionSchema>>
   query(dataSourceId: string): Promise<Result<NotionPage[]>>
   create(dataSourceId: string, values: Record<string, NotionValue>): Promise<Result<NotionPage>>
-  update(pageId: string, values: Record<string, NotionValue>): Promise<Result<NotionPage>>
+  /**
+   * Cambia propiedades de una página. Con before (los valores que había al empezar a editar),
+   * main comprueba antes que no hayan cambiado en Notion; si cambiaron, falla con 'conflict'.
+   */
+  update(pageId: string, values: Record<string, NotionValue>, before?: Record<string, NotionValue>): Promise<Result<NotionPage>>
+  /** Comprueba el token, cuántas bases de datos ve y si puede leer la elegida */
+  check(dataSourceId?: string): Promise<Result<NotionAccess>>
 }
 
 // ---------- Navegadores ----------
@@ -712,7 +735,8 @@ export const IPC = {
     schema: 'nido:notion:schema',
     query: 'nido:notion:query',
     create: 'nido:notion:create',
-    update: 'nido:notion:update'
+    update: 'nido:notion:update',
+    check: 'nido:notion:check'
   },
   browsers: {
     list: 'nido:browsers:list',

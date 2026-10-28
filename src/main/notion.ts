@@ -1,5 +1,6 @@
 import {
   IPC,
+  type NotionAccess,
   type NotionPage,
   type NotionProperty,
   type NotionSchema,
@@ -255,19 +256,46 @@ function disconnect(): Promise<NotionStatus> {
 
 const plainText = (rich: any[] | undefined): string => (rich ?? []).map((t) => t.plain_text ?? '').join('')
 
+/** Bases de datos (fuentes de datos) compartidas con la conexión. Pagina hasta 200. */
 async function search(query: string): Promise<NotionSource[]> {
-  const json = await call<any>('/search', {
-    method: 'POST',
-    body: JSON.stringify({
-      query: query.trim() || undefined,
-      filter: { property: 'object', value: 'data_source' },
-      sort: { timestamp: 'last_edited_time', direction: 'descending' },
-      page_size: 50
+  const out: NotionSource[] = []
+  let cursor: string | undefined
+  do {
+    const json = await call<any>('/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: query.trim() || undefined,
+        filter: { property: 'object', value: 'data_source' },
+        sort: { timestamp: 'last_edited_time', direction: 'descending' },
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {})
+      })
     })
-  })
-  return (json.results ?? [])
-    .filter((r: any) => r.object === 'data_source')
-    .map((r: any) => ({ id: r.id, title: plainText(r.title) || 'Sin título' }))
+    for (const r of json.results ?? []) {
+      if (r.object === 'data_source' && !r.in_trash) out.push({ id: r.id, title: plainText(r.title) || 'Sin título' })
+    }
+    cursor = json.has_more ? json.next_cursor : undefined
+  } while (cursor && out.length < 200)
+  return out
+}
+
+/** «Comprobar acceso»: token válido, bases visibles y lectura real de la elegida (sin caché). */
+async function check(dataSourceId?: string): Promise<NotionAccess> {
+  const me = await call<any>('/users/me')
+  const sources = await search('')
+  const access: NotionAccess = { workspace: me?.bot?.workspace_name ?? getConfig().notion?.workspace, sources: sources.length }
+  if (dataSourceId) {
+    try {
+      await schema(dataSourceId)
+      access.readable = true
+      access.pages = (await query(dataSourceId)).length
+      queryCache.delete(dataSourceId)
+    } catch (err) {
+      if (err instanceof NidoError && (err.code === 'notfound' || err.code === 'forbidden')) access.readable = false
+      else throw err
+    }
+  }
+  return access
 }
 
 async function schema(dataSourceId: string): Promise<NotionSchema> {
@@ -315,7 +343,19 @@ function toPage(page: any): NotionPage {
     const value = simplify(prop)
     if (value) properties[name] = value
   }
-  return { id: page.id, url: page.url, properties }
+  return { id: page.id, url: page.url, lastEdited: page.last_edited_time, properties }
+}
+
+/** Compara dos valores simplificados (las fechas, por su día y hora tal como los da Notion). */
+function same(a: NotionValue | undefined, b: NotionValue | undefined): boolean {
+  const norm = (v: NotionValue | undefined): unknown => {
+    if (!v) return null
+    if (v.type === 'multi_select') return [...v.value].sort()
+    if (v.type === 'date') return v.value ? { start: v.value.start, end: v.value.end ?? null } : null
+    if (v.type === 'title') return String(v.value).trim()
+    return v.value
+  }
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b))
 }
 
 function toNotion(values: Record<string, NotionValue>): Record<string, unknown> {
@@ -391,14 +431,19 @@ export function registerNotion(): void {
       )
     )
   )
-  handleResult(IPC.notion.update, (pageId: string, values: Record<string, NotionValue>) =>
-    writing(async () =>
-      toPage(
-        await call<any>(`/pages/${encodeURIComponent(pageId)}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ properties: toNotion(values) })
-        })
-      )
-    )
+  handleResult(IPC.notion.update, (pageId: string, values: Record<string, NotionValue>, before?: Record<string, NotionValue>) =>
+    writing(async () => {
+      const path = `/pages/${encodeURIComponent(pageId)}`
+      if (before && Object.keys(before).length) {
+        // Sin sobrescrituras silenciosas: si alguien cambió en Notion lo que vamos a cambiar, se avisa.
+        const current = toPage(await call<any>(path))
+        const changed = Object.keys(before).filter((name) => same(current.properties[name], before[name]) === false)
+        if (changed.length) {
+          throw new NidoError('conflict', `Esta tarea ha cambiado en Notion mientras la editabas (${changed.join(', ')}). Se ha recargado: revisa y vuelve a guardar.`)
+        }
+      }
+      return toPage(await call<any>(path, { method: 'PATCH', body: JSON.stringify({ properties: toNotion(values) }) }))
+    })
   )
+  handleResult(IPC.notion.check, (id?: string) => check(id ? String(id) : undefined))
 }

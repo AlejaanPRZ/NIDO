@@ -9,6 +9,9 @@ import type { WidgetProps } from '../types'
 import { PlayerUI, type Capability } from './PlayerUI'
 
 const MAX_THUMBS = 20
+/** Lo que la app dice que reproduce (si no lo dice, no se inventa). */
+const KIND_LABEL: Record<string, string> = { Music: 'Música', Video: 'Vídeo', Image: 'Imagen', Unknown: '' }
+
 const TO_MODE: Record<MediaRepeat, RepeatMode> = { None: 'off', List: 'all', Track: 'one' }
 const TO_MEDIA: Record<RepeatMode, MediaRepeat> = { off: 'None', all: 'List', one: 'Track' }
 const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: 'all', all: 'one', one: 'off' }
@@ -135,6 +138,7 @@ export function SystemPlayer({ widget, update }: WidgetProps<'music'>): JSX.Elem
             {playing && <span className="live-dot" />}
             {brandOfApp(session.id) && <BrandLogo brand={brandOfApp(session.id)!} name={app} size={18} decorative />}
             {app}
+            {KIND_LABEL[session.kind ?? 'Unknown'] && <span className="kind">· {KIND_LABEL[session.kind ?? 'Unknown']}</span>}
           </span>
         }
         title={session.title || 'Sin título'}

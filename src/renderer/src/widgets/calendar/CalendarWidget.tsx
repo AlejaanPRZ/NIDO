@@ -269,7 +269,9 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
             label: (
               <>
                 <span className="long">{v.label}</span>
-                <span className="short">{v.short}</span>
+                <span className="short" aria-hidden>
+                  {v.short}
+                </span>
               </>
             )
           }))}

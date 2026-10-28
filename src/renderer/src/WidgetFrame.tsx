@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Widget, Workspace } from '../../shared/types'
 import { BrandLogo, hasBrand } from './BrandLogo'
 import { catalogById } from './catalog'
@@ -20,6 +20,13 @@ interface Props {
   onExpand(expanded: boolean): void
   children: ReactNode
 }
+
+/**
+ * Hueco en la cabecera para controles del propio widget (p. ej. la navegación de un panel web
+ * con la barra plegada). El widget los pinta ahí con createPortal; quedan fuera de la zona de arrastre.
+ */
+const HeaderSlotContext = createContext<HTMLElement | null>(null)
+export const useHeaderSlot = (): HTMLElement | null => useContext(HeaderSlotContext)
 
 const HEADER_PX = 46
 const ROW_PX = 32
@@ -50,6 +57,7 @@ export function WidgetFrame({ widget, workspaceId, workspaces, locked, expanded,
   const [draft, setDraft] = useState(widget.title)
   const ref = useRef<HTMLElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
   const def = WIDGETS[widget.type]
   const entry = catalogById(widget.catalogId)
 
@@ -144,8 +152,15 @@ export function WidgetFrame({ widget, workspaceId, workspaces, locked, expanded,
     >
       <header
         className={`widget-header ${blocked || expanded ? '' : 'widget-drag'}`}
+        title={blocked || expanded ? undefined : 'Arrastra la cabecera para mover el widget'}
         onDoubleClick={(e) => e.target === e.currentTarget && onExpand(!expanded)}
       >
+        {/* Asa de mover: la cabecera entera arrastra; el asa lo hace visible. */}
+        {!blocked && !expanded && (
+          <span className="widget-grip" aria-hidden>
+            <Icon name="grip" size={14} />
+          </span>
+        )}
         {hasBrand(entry?.brand) ? (
           <BrandLogo brand={entry.brand} name={entry.title} size={26} className="widget-brand" />
         ) : (
@@ -180,28 +195,31 @@ export function WidgetFrame({ widget, workspaceId, workspaces, locked, expanded,
           </span>
         )}
         {collapsed && <span className="widget-summary">{summary}</span>}
+        <div className="widget-slot no-drag" ref={setSlot} />
         <div className="widget-actions no-drag">
           {!expanded && !blocked && (
             <button
               className="icon-btn small"
-              title={widget.collapsed ? 'Desplegar' : 'Plegar'}
+              title={widget.collapsed ? 'Desplegar (mostrar el contenido)' : 'Plegar (dejar solo la cabecera)'}
               aria-label={widget.collapsed ? 'Desplegar' : 'Plegar'}
               onClick={() => dispatch({ type: 'collapse', id: widget.id, collapsed: !widget.collapsed })}
             >
               <Icon name={widget.collapsed ? 'chevronDown' : 'chevronUp'} size={14} />
             </button>
           )}
-          <button className="icon-btn small" title={expanded ? 'Volver al panel (Esc)' : 'Ampliar'} aria-label={expanded ? 'Volver al panel' : 'Ampliar'} onClick={() => onExpand(!expanded)}>
+          <button className="icon-btn small" title={expanded ? 'Volver al panel (Esc)' : 'Ampliar temporalmente (Esc para volver)'} aria-label={expanded ? 'Volver al panel' : 'Ampliar'} onClick={() => onExpand(!expanded)}>
             <Icon name={expanded ? 'shrink' : 'expand'} size={13} />
           </button>
-          <MenuButton items={menu} title="Más opciones" className="icon-btn small">
+          <MenuButton items={menu} title="Más opciones: tamaño, fijar, duplicar, mover, eliminar…" className="icon-btn small">
             <Icon name="more" size={15} />
           </MenuButton>
         </div>
       </header>
       {/* Plegado se oculta sin desmontar: la música sigue sonando y el panel web no se recarga. */}
       <div ref={bodyRef} className="widget-body no-drag" hidden={collapsed}>
-        <WidgetErrorBoundary name={widget.title}>{children}</WidgetErrorBoundary>
+        <HeaderSlotContext.Provider value={slot}>
+          <WidgetErrorBoundary name={widget.title}>{children}</WidgetErrorBoundary>
+        </HeaderSlotContext.Provider>
       </div>
     </section>
   )

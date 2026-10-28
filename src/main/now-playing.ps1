@@ -115,6 +115,8 @@ function Get-Snapshot {
           artist    = [string]$props.Artist
           album     = [string]$props.AlbumTitle
           status    = $playback.PlaybackStatus.ToString()
+          # Tipo de contenido que declara la app (Music, Video, Image o Unknown).
+          kind      = if ($null -eq $playback.PlaybackType) { 'Unknown' } else { $playback.PlaybackType.ToString() }
           canToggle = [bool]($playback.Controls.IsPlayPauseToggleEnabled -or $playback.Controls.IsPlayEnabled -or $playback.Controls.IsPauseEnabled)
           canNext   = [bool]$playback.Controls.IsNextEnabled
           canPrev   = [bool]$playback.Controls.IsPreviousEnabled
@@ -147,7 +149,7 @@ $lastTimes = @{}
 # más de 2 s de lo previsto (salto en la pista). El avance normal lo interpola Nido.
 function Test-Changed($snapshot) {
   $signature = ($snapshot.sessions | ForEach-Object {
-      "$($_.id)|$($_.title)|$($_.artist)|$($_.album)|$($_.status)|$($_.canToggle)$($_.canNext)$($_.canPrev)$($_.canSeek)$($_.canShuffle)$($_.canRepeat)|$($_.shuffle)|$($_.repeat)|$($_.duration)|$($_.thumbKey)|$($_.current)"
+      "$($_.id)|$($_.title)|$($_.artist)|$($_.album)|$($_.status)|$($_.kind)|$($_.canToggle)$($_.canNext)$($_.canPrev)$($_.canSeek)$($_.canShuffle)$($_.canRepeat)|$($_.shuffle)|$($_.repeat)|$($_.duration)|$($_.thumbKey)|$($_.current)"
     }) -join "`n"
   if ($signature -ne $script:lastSignature) { return $signature }
   foreach ($session in $snapshot.sessions) {

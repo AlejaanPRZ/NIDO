@@ -81,9 +81,26 @@ export function NotionSetup({ current, onSave, onCancel }: Props): JSX.Element {
           {searchError && <p className="field-error">{searchError}</p>}
           {!sources && !searchError && <Spinner />}
           {sources?.length === 0 && (
-            <p className="muted small-text">
-              No aparece ninguna. En Notion, abre la base de datos → ••• → Conexiones y añade tu integración.
-            </p>
+            <div className="empty-inline">
+              <p className="muted small-text">
+                {query.trim()
+                  ? 'Ninguna base de datos coincide.'
+                  : 'Nido no ve ninguna base de datos. Solo puede ver las que compartiste con él: elige páginas de nuevo o, en Notion, abre la base de datos → ••• → Conexiones → Nido.'}
+              </p>
+              {!query.trim() && (
+                <button
+                  className="btn small"
+                  onClick={() =>
+                    void window.nido.notion.connect().then((r) => {
+                      if (r.ok) setQuery(' ') // fuerza una búsqueda nueva
+                      else if (r.code !== 'cancelled') setSearchError(r.error)
+                    })
+                  }
+                >
+                  Elegir páginas en Notion
+                </button>
+              )}
+            </div>
           )}
           {sources?.map((s) => (
             <button key={s.id} className="list-btn" onClick={() => setChosen(s)}>

@@ -13,7 +13,7 @@ export function MusicWidget(props: WidgetProps<'music'>): JSX.Element {
         className="full"
         value={source}
         options={[
-          { value: 'system', label: 'Ahora suena', title: 'Lo que suena en Apple Music, Spotify, el navegador…' },
+          { value: 'system', label: 'Ahora suena', title: 'Música o vídeo que suena en Apple Music, Spotify, el navegador…' },
           { value: 'local', label: 'Mis archivos', title: 'Canciones de tu equipo' }
         ]}
         onChange={(v) => props.update({ source: v })}

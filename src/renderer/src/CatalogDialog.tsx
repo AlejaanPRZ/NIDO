@@ -40,11 +40,14 @@ export function CatalogDialog({ onClose, onAdded }: { onClose(): void; onAdded(e
       toast('La distribución está bloqueada. Desbloquéala para añadir widgets.', 'info')
       return
     }
-    dispatch({ type: 'add', widgetType: entry.widget, data: entry.data, title: entry.widgetTitle, size: sizes[entry.id] ?? 'm', catalogId: entry.id })
+    dispatch({ type: 'add', widgetType: entry.widget, data: entry.data, title: entry.widgetTitle, size: sizes[entry.id] ?? entry.size ?? 'm', catalogId: entry.id })
     onClose()
     onAdded(entry)
-    if (entry.account) {
-      toast(`${entry.title} necesita conectar tu cuenta.`, 'info', { label: 'Configurar', run: () => openSettings('conexiones') })
+    // Solo las integraciones nativas se conectan en Ajustes; en un panel web se inicia sesión dentro del panel.
+    if (entry.account && entry.mode === 'nativo') {
+      toast(`${entry.title} necesita conectar tu cuenta.`, 'info', { label: 'Conectar', run: () => openSettings('conexiones') })
+    } else if (entry.account && entry.mode === 'web') {
+      toast(`Inicia sesión en ${entry.title} dentro del panel. Si no lo permite, usa ↗ para abrirlo en tu navegador.`, 'info')
     }
   }
 
@@ -84,7 +87,7 @@ export function CatalogDialog({ onClose, onAdded }: { onClose(): void; onAdded(e
             {entries.length === 0 && <p className="muted">{filter === 'favoritos' ? 'Marca widgets con la estrella para tenerlos aquí.' : 'Nada coincide con la búsqueda.'}</p>}
             {entries.map((e) => {
               const available = e.status === 'disponible'
-              const size = sizes[e.id] ?? 'm'
+              const size = sizes[e.id] ?? e.size ?? 'm'
               const dims = e.widget ? WIDGETS[e.widget].sizes[size] : null
               return (
                 <article key={e.id} className={`catalog-card ${available ? '' : 'soon'}`} style={{ '--tint': e.tint } as CSSProperties}>
