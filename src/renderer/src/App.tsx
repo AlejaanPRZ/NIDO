@@ -454,7 +454,7 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // La bienvenida aparece una sola vez: queda marcada en el estado guardado.
+  // El recorrido de bienvenida aparece una sola vez: completarlo o saltarlo lo marca en el estado guardado.
   useEffect(() => {
     if (ready && !state.settings.welcomeSeen) setWelcomeOpen(true)
     // Solo al terminar de cargar.
@@ -468,7 +468,6 @@ export default function App(): JSX.Element {
   const showWelcome = useCallback(() => {
     setSettingsSection(null)
     setWelcomeOpen(true)
-    document.querySelector('.board-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
   // Tema, transparencia y movimiento se aplican como atributos en <html>.

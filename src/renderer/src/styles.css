@@ -74,6 +74,8 @@
   --r-sm: 10px;
   --r-xs: 7px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Para lo que se desplaza por la pantalla (demostraciones de la bienvenida). */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --fast: 130ms;
   color-scheme: light;
 }
@@ -2077,87 +2079,1082 @@ input.switch:checked {
 
 /* ---------- Bienvenida ---------- */
 
-.welcome {
-  position: relative;
-  margin-bottom: 16px;
-  padding: 20px 22px 18px;
+/* ---------- Recorrido de bienvenida ---------- */
+
+.ob-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--scrim);
+  /* El desenfoque va en el fondo: si la ventana lo lleva y tiene animaciones activas, Chromium no lo aplica. */
+  backdrop-filter: blur(10px) saturate(140%);
+  animation: ob-fade 200ms var(--ease);
+}
+@keyframes ob-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(580px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px 22px 18px;
   border-radius: var(--r-xl);
-  background: var(--surface-strong);
   border: 1px solid var(--border);
+  /* Más opaco que el cristal normal: es texto para leer con calma. */
+  background: var(--surface-strong);
   box-shadow:
     var(--highlight),
-    var(--shadow);
-  animation: pop 240ms var(--ease);
+    var(--shadow-lg);
+  animation: pop 260ms var(--ease);
 }
 
-.welcome-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
-}
-
-.welcome-head {
+.ob-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 16px;
-  padding-right: 36px;
+  justify-content: space-between;
+}
+.ob-progress {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
-.welcome h1 {
-  margin: 0 0 2px;
+/* Las escenas se apilan en la misma celda: el alto no salta al cambiar. */
+.ob-copy,
+.ob-screen {
+  display: grid;
+}
+.ob-copy > .ob-scene,
+.ob-screen > .ob-scene {
+  grid-area: 1 / 1;
+}
+.ob-scene {
+  transition:
+    opacity 280ms var(--ease),
+    transform 280ms var(--ease),
+    visibility 0s linear 280ms;
+}
+.ob-scene.is-active {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.ob-scene.is-before,
+.ob-scene.is-after {
+  opacity: 0;
+  visibility: hidden;
+}
+/* La dirección dice si se ha avanzado o retrocedido. */
+.ob-demo.is-before {
+  transform: translateX(-28px);
+}
+.ob-demo.is-after {
+  transform: translateX(28px);
+}
+.ob-text.is-before {
+  transform: translateX(-14px);
+}
+.ob-text.is-after {
+  transform: translateX(14px);
+}
+
+.ob-copy h2 {
+  margin: 0 0 6px;
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.025em;
 }
-
-.welcome-head p {
+.ob-copy p {
   margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
 }
-
-.welcome-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-}
-
-.welcome-point {
-  display: flex;
-  gap: 10px;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: var(--fill);
-}
-
-.welcome-point h3 {
-  margin: 0 0 2px;
-  font-size: 13px;
-}
-
-.welcome-point p {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.welcome-icon {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border-radius: 9px;
-  background: var(--accent-soft);
+.ob-copy .ob-kicker {
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--accent-ink);
 }
+.ob-link {
+  margin-top: 8px;
+}
+.ob-kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--btn);
+  font: 600 11.5px/1.6 var(--font);
+  color: var(--text);
+}
 
-.welcome-actions {
+.ob-foot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ob-dots {
+  display: flex;
+}
+.ob-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.ob-dot::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fill-2);
+  transition:
+    background-color 200ms var(--ease),
+    transform 200ms var(--ease);
+}
+.ob-dot.active::before {
+  background: var(--accent);
+  transform: scale(1.3);
+}
+.ob-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 50%;
+}
+.ob-nav {
+  display: flex;
   gap: 8px;
-  margin-top: 14px;
+}
+.ob-nav .btn {
+  min-width: 96px;
+  justify-content: center;
+}
+
+/* ---------- Escenario: miniatura de la interfaz a 440×220, escalada para caber ---------- */
+
+.ob-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(60% 70% at 10% 0%, var(--veil-1), transparent 70%),
+    radial-gradient(60% 70% at 95% 100%, var(--veil-4), transparent 70%),
+    var(--base);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.ob-screen {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 440px;
+  height: 220px;
+  margin-left: -220px;
+  transform-origin: top center;
+}
+.ob-demo {
+  position: relative;
+  width: 440px;
+  height: 220px;
+}
+
+.ob-bar {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--glass-strong);
+  box-shadow: var(--edge);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.ob-brand.brand-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+.ob-tab {
+  position: relative;
+  z-index: 1;
+  width: 70px;
+  text-align: center;
+}
+.ob-tab-pill {
+  position: absolute;
+  left: 26px;
+  width: 70px;
+  height: 20px;
+  border-radius: 7px;
+  background: var(--seg-active);
+  box-shadow: var(--edge);
+}
+.ob-add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--accent-grad);
+  color: var(--accent-text);
+}
+
+.ob-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: 11px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: var(--edge), var(--shadow);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ob-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.ob-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  color: #fff;
+}
+.ob-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ob-line {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--fill-2);
+}
+/* Rejilla de 3 columnas como la del panel. */
+.ob-a {
+  left: 16px;
+  top: 50px;
+  width: 128px;
+  height: 158px;
+}
+.ob-b {
+  left: 156px;
+  top: 50px;
+  width: 128px;
+  height: 72px;
+}
+.ob-c {
+  left: 296px;
+  top: 50px;
+  width: 128px;
+  height: 72px;
+}
+.ob-d {
+  left: 156px;
+  top: 134px;
+  width: 268px;
+  height: 74px;
+}
+.ob-cal {
+  height: 100px;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 15px, var(--separator) 15px 16px),
+    repeating-linear-gradient(180deg, transparent 0 19px, var(--separator) 19px 20px);
+}
+
+.ob-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.85);
+  border: 2px solid var(--accent);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ---------- Escena 1: añadir un widget ---------- */
+
+.ob-slot {
+  position: absolute;
+  left: 296px;
+  top: 50px;
+  width: 128px;
+  height: 72px;
+  border-radius: 11px;
+  border: 1.5px dashed var(--border-strong);
+}
+.ob-sheet {
+  position: absolute;
+  left: 120px;
+  top: 44px;
+  width: 210px;
+  padding: 8px 10px 10px;
+  border-radius: 12px;
+  background: var(--glass-strong);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text);
+  z-index: 3;
+  /* Sale del botón «Añadir widget», arriba a la derecha. */
+  transform-origin: 100% 0;
+  opacity: 0;
+  transform: scale(0.96);
+}
+.ob-sheet p {
+  margin: 0 0 6px;
+}
+.ob-sheet-cards {
+  display: flex;
+  gap: 8px;
+}
+.ob-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 56px;
+  padding: 7px 0 6px;
+  border-radius: 9px;
+  background: var(--fill);
+  font-weight: 600;
+}
+.ob-card > span {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+.ob-demo-add.is-active .ob-cursor {
+  animation: ob-add-cursor 6s var(--ease-in-out) infinite;
+}
+.ob-demo-add.is-active .ob-add {
+  animation: ob-add-press 6s var(--ease) infinite;
+}
+.ob-demo-add.is-active .ob-sheet {
+  animation: ob-add-sheet 6s var(--ease) infinite;
+}
+.ob-demo-add.is-active .ob-card-pick {
+  animation: ob-add-pick 6s var(--ease) infinite;
+}
+.ob-demo-add.is-active .ob-new {
+  animation: ob-add-new 6s var(--ease) infinite;
+}
+@keyframes ob-add-cursor {
+  0% {
+    opacity: 0;
+    transform: translate(300px, 196px);
+  }
+  6% {
+    opacity: 1;
+  }
+  15%,
+  19% {
+    transform: translate(372px, 24px);
+  }
+  33%,
+  39% {
+    transform: translate(158px, 100px);
+  }
+  52% {
+    opacity: 1;
+    transform: translate(330px, 110px);
+  }
+  60%,
+  100% {
+    opacity: 0;
+    transform: translate(330px, 110px);
+  }
+}
+@keyframes ob-add-press {
+  0%,
+  15%,
+  21%,
+  100% {
+    transform: none;
+  }
+  17% {
+    transform: scale(0.93);
+  }
+}
+@keyframes ob-add-sheet {
+  0%,
+  18% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  23%,
+  40% {
+    opacity: 1;
+    transform: none;
+  }
+  46%,
+  100% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes ob-add-pick {
+  0%,
+  35%,
+  44%,
+  100% {
+    background: var(--fill);
+    transform: none;
+  }
+  37%,
+  42% {
+    background: var(--accent-soft);
+    transform: scale(0.95);
+  }
+}
+@keyframes ob-add-new {
+  0%,
+  46% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  54%,
+  90% {
+    opacity: 1;
+    transform: none;
+  }
+  97%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* ---------- Escena 2: arrastrar e intercambiar (estado base: ya intercambiados) ---------- */
+
+.ob-swap-b {
+  transform: translateX(140px);
+}
+.ob-swap-c {
+  transform: translateX(-140px);
+  z-index: 2;
+}
+.ob-ghost {
+  position: absolute;
+  left: 156px;
+  top: 50px;
+  width: 128px;
+  height: 72px;
+  border-radius: 11px;
+  border: 1.5px dashed var(--accent);
+  background: var(--accent-soft);
+  opacity: 0;
+}
+.ob-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  margin-left: -105px;
+  width: 210px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--glass-strong);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text);
+  z-index: 3;
+}
+.ob-toast b {
+  color: var(--accent-ink);
+}
+.ob-demo-move.is-active .ob-cursor {
+  animation: ob-move-cursor 6.5s var(--ease-in-out) infinite;
+}
+.ob-demo-move.is-active .ob-swap-c {
+  animation: ob-move-c 6.5s var(--ease-in-out) infinite;
+}
+.ob-demo-move.is-active .ob-swap-b {
+  animation: ob-move-b 6.5s var(--ease-in-out) infinite;
+}
+.ob-demo-move.is-active .ob-ghost {
+  animation: ob-move-ghost 6.5s var(--ease) infinite;
+}
+.ob-demo-move.is-active .ob-toast {
+  animation: ob-move-toast 6.5s var(--ease) infinite;
+}
+@keyframes ob-move-cursor {
+  0% {
+    opacity: 0;
+    transform: translate(330px, 190px);
+  }
+  6% {
+    opacity: 1;
+  }
+  14%,
+  19% {
+    transform: translate(340px, 58px);
+  }
+  40%,
+  46% {
+    transform: translate(200px, 58px);
+  }
+  60%,
+  67% {
+    transform: translate(300px, 199px);
+  }
+  80% {
+    opacity: 1;
+  }
+  88%,
+  100% {
+    opacity: 0;
+    transform: translate(330px, 190px);
+  }
+}
+@keyframes ob-move-c {
+  0%,
+  17% {
+    transform: none;
+  }
+  21% {
+    transform: scale(1.03);
+  }
+  40% {
+    transform: translateX(-140px) scale(1.03);
+  }
+  45%,
+  67% {
+    transform: translateX(-140px);
+  }
+  78%,
+  100% {
+    transform: none;
+  }
+}
+@keyframes ob-move-b {
+  0%,
+  41% {
+    transform: none;
+  }
+  52%,
+  67% {
+    transform: translateX(140px);
+  }
+  78%,
+  100% {
+    transform: none;
+  }
+}
+@keyframes ob-move-ghost {
+  0%,
+  20% {
+    opacity: 0;
+  }
+  25%,
+  40% {
+    opacity: 1;
+  }
+  45%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ob-move-toast {
+  0%,
+  48% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  54%,
+  68% {
+    opacity: 1;
+    transform: none;
+  }
+  74%,
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* ---------- Escena 3: espacios (estado base: Trabajo) ---------- */
+
+.ob-layout {
+  position: absolute;
+  inset: 0;
+}
+.ob-l2,
+.ob-l3 {
+  opacity: 0;
+}
+.ob-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 40px;
+  margin-top: 30px;
+}
+.ob-eq i {
+  width: 10px;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ff7aa8, #e8467c);
+  transform-origin: bottom;
+  transform: scaleY(0.5);
+}
+.ob-ring {
+  width: 70px;
+  height: 70px;
+  margin: 26px auto 0;
+  border-radius: 50%;
+  background: conic-gradient(#ff7a1a 0 64%, var(--fill-2) 64% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 54%, #000 55%);
+  mask: radial-gradient(circle, transparent 54%, #000 55%);
+}
+.ob-demo-spaces.is-active .ob-tab-pill {
+  animation: ob-spaces-pill 7.5s var(--ease-in-out) infinite;
+}
+.ob-demo-spaces.is-active .ob-l1 {
+  animation: ob-spaces-l1 7.5s var(--ease) infinite;
+}
+.ob-demo-spaces.is-active .ob-l2 {
+  animation: ob-spaces-l2 7.5s var(--ease) infinite;
+}
+.ob-demo-spaces.is-active .ob-l3 {
+  animation: ob-spaces-l3 7.5s var(--ease) infinite;
+}
+.ob-demo-spaces.is-active .ob-eq i {
+  animation: ob-eq 0.9s var(--ease-in-out) infinite alternate;
+}
+.ob-demo-spaces.is-active .ob-eq i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.ob-demo-spaces.is-active .ob-eq i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+.ob-demo-spaces.is-active .ob-eq i:nth-child(4) {
+  animation-delay: -0.15s;
+}
+@keyframes ob-eq {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes ob-spaces-pill {
+  0%,
+  30% {
+    transform: none;
+  }
+  36%,
+  63% {
+    transform: translateX(74px);
+  }
+  69%,
+  93% {
+    transform: translateX(148px);
+  }
+  99%,
+  100% {
+    transform: none;
+  }
+}
+@keyframes ob-spaces-l1 {
+  0%,
+  30% {
+    opacity: 1;
+    transform: none;
+  }
+  35%,
+  93% {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  94% {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  99%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ob-spaces-l2 {
+  0%,
+  31% {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  36%,
+  63% {
+    opacity: 1;
+    transform: none;
+  }
+  68%,
+  100% {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+@keyframes ob-spaces-l3 {
+  0%,
+  64% {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  69%,
+  93% {
+    opacity: 1;
+    transform: none;
+  }
+  98%,
+  100% {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+/* ---------- Escena 4: cuentas y buscador (estado base: evento nuevo y casilla marcada) ---------- */
+
+.ob-gcal {
+  width: 200px;
+}
+.ob-notion {
+  left: 224px;
+  top: 50px;
+  width: 200px;
+  height: 158px;
+}
+.ob-event {
+  display: flex;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border-left: 3px solid #4285f4;
+  background: var(--fill);
+  font-weight: 500;
+}
+.ob-event b {
+  color: var(--muted);
+  font-weight: 600;
+}
+.ob-event-new {
+  border-left-color: #e8467c;
+}
+.ob-todo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-weight: 500;
+}
+.ob-todo i {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+  color: var(--accent-text);
+}
+.ob-todo-tick {
+  color: var(--muted);
+}
+.ob-todo-tick i {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.ob-todo-tick::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  width: 70px;
+  height: 1px;
+  background: currentColor;
+  transform-origin: left;
+}
+.ob-palette {
+  position: absolute;
+  left: 100px;
+  top: 46px;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--glass-strong);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text);
+  z-index: 3;
+  opacity: 0;
+  transform: scale(0.97);
+}
+.ob-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: var(--fill);
+}
+.ob-typed {
+  clip-path: inset(0 0 0 0);
+}
+.ob-caret {
+  width: 1px;
+  height: 10px;
+  margin-left: -4px;
+  background: var(--accent);
+}
+.ob-result {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+}
+.ob-result small {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 500;
+}
+.ob-result.dim {
+  background: none;
+}
+.ob-demo-connect.is-active .ob-event-new {
+  animation: ob-connect-event 7s var(--ease) infinite;
+}
+.ob-demo-connect.is-active .ob-todo-tick i {
+  animation: ob-connect-box 7s var(--ease) infinite;
+}
+.ob-demo-connect.is-active .ob-todo-tick i svg {
+  animation: ob-connect-check 7s var(--ease) infinite;
+}
+.ob-demo-connect.is-active .ob-todo-tick::after {
+  animation: ob-connect-strike 7s var(--ease) infinite;
+}
+.ob-demo-connect.is-active .ob-palette {
+  animation: ob-connect-palette 7s var(--ease) infinite;
+}
+.ob-demo-connect.is-active .ob-typed {
+  animation: ob-connect-type 7s linear infinite;
+}
+.ob-demo-connect.is-active .ob-caret {
+  animation: ob-caret 0.9s steps(1) infinite;
+}
+@keyframes ob-connect-event {
+  0%,
+  6% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  14%,
+  92% {
+    opacity: 1;
+    transform: none;
+  }
+  98%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+@keyframes ob-connect-box {
+  0%,
+  22% {
+    background: transparent;
+    border-color: var(--border-strong);
+  }
+  27%,
+  92% {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  98%,
+  100% {
+    background: transparent;
+    border-color: var(--border-strong);
+  }
+}
+@keyframes ob-connect-check {
+  0%,
+  22% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  28%,
+  92% {
+    opacity: 1;
+    transform: none;
+  }
+  98%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ob-connect-strike {
+  0%,
+  26% {
+    transform: scaleX(0);
+  }
+  32%,
+  92% {
+    transform: none;
+  }
+  98%,
+  100% {
+    transform: scaleX(0);
+  }
+}
+@keyframes ob-connect-palette {
+  0%,
+  38% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  44%,
+  84% {
+    opacity: 1;
+    transform: none;
+  }
+  90%,
+  100% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes ob-connect-type {
+  0%,
+  47% {
+    clip-path: inset(0 100% 0 0);
+  }
+  /* Letra a letra. */
+  48% {
+    clip-path: inset(0 100% 0 0);
+    animation-timing-function: steps(4, end);
+  }
+  60%,
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes ob-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------- Ventana estrecha o baja (y pantallas pequeñas) ---------- */
+@media (max-width: 720px), (max-height: 620px) {
+  .ob-backdrop {
+    padding: 0;
+  }
+  .onboarding {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    border: 0;
+    /* A pantalla completa no hay nada detrás que ver: superficie opaca. */
+    background: var(--solid, var(--base));
+    padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    gap: 10px;
+  }
+  .ob-copy h2 {
+    font-size: 18px;
+  }
+  .ob-copy p {
+    font-size: 13px;
+  }
+  .ob-foot {
+    margin-top: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .ob-dots {
+    justify-content: center;
+  }
+  .ob-nav .btn {
+    flex: 1;
+  }
+}
+
+/*
+ * Movimiento reducido: sin desplazamientos ni demostraciones en bucle (cada una queda en su estado
+ * final, que ya explica la función); entre escenas solo un fundido corto.
+ */
+:root[data-motion='reduced'] .onboarding .ob-scene {
+  transform: none !important;
+  transition:
+    opacity 180ms ease,
+    visibility 0s linear 180ms !important;
+}
+:root[data-motion='reduced'] .onboarding .ob-scene.is-active {
+  transition:
+    opacity 180ms ease,
+    visibility 0s !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding .ob-scene {
+    transform: none !important;
+    transition:
+      opacity 180ms ease,
+      visibility 0s linear 180ms !important;
+  }
+  .onboarding .ob-scene.is-active {
+    transition:
+      opacity 180ms ease,
+      visibility 0s !important;
+  }
 }
 
 /* ---------- Ventanas emergentes, menús y avisos ---------- */

@@ -27,7 +27,7 @@ export const SHORTCUTS: [string, string][] = [
   ['Ctrl + L', 'Bloquear o desbloquear la distribución'],
   ['Ctrl + Mayús + N', 'Añadir una nota'],
   ['Ctrl + B / I', 'Negrita y cursiva en una nota'],
-  ['F1', 'Ver la bienvenida'],
+  ['F1', 'Repetir el recorrido de bienvenida'],
   ['Esc', 'Cerrar ventanas, menús y el widget ampliado']
 ]
 
@@ -1227,9 +1227,9 @@ function HelpSection({ onShowWelcome }: { onShowWelcome(): void }): JSX.Element 
     <>
       <Group title="Bienvenida">
         <div className="row">
-          <p className="muted small-text grow">El mensaje de inicio con lo básico de Nido.</p>
+          <p className="muted small-text grow">Cuatro pasos animados con lo básico de Nido. También con F1.</p>
           <button className="btn small" onClick={onShowWelcome}>
-            Ver bienvenida
+            Repetir el recorrido
           </button>
         </div>
       </Group>
