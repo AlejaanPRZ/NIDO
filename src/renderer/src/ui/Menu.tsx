@@ -33,6 +33,7 @@ export function MenuButton({ items, title, className = 'icon-btn', children, ali
     <>
       <button
         ref={anchor}
+        type="button"
         className={`${className} no-drag ${open ? 'is-open' : ''}`}
         title={title}
         aria-haspopup="menu"

@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { MEDIA_SCHEME, type Track } from '../shared/types'
+import { IMAGE_MIME, isAllowedImage } from './files'
 
 const AUDIO_MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
@@ -29,13 +30,22 @@ export function registerMediaScheme(): void {
 }
 
 /**
- * Sirve archivos de audio locales en nido-media://local/<ruta codificada>.
- * Solo extensiones de audio, con soporte de Range para poder buscar en la pista.
+ * Sirve archivos locales en nido-media://local/<ruta codificada>:
+ * audio (con soporte de Range para poder buscar en la pista) e imágenes,
+ * estas solo si el usuario eligió el archivo o su carpeta.
  */
 export function handleMediaProtocol(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     const url = new URL(request.url)
     const filePath = decodeURIComponent(url.pathname.replace(/^\//, ''))
+    if (isAllowedImage(filePath)) {
+      try {
+        const data = await fs.promises.readFile(filePath)
+        return new Response(data, { headers: { 'Content-Type': IMAGE_MIME[extname(filePath).toLowerCase()], 'Cache-Control': 'max-age=3600' } })
+      } catch {
+        return new Response('No encontrado', { status: 404 })
+      }
+    }
     if (!isAudio(filePath)) return new Response('Tipo no permitido', { status: 403 })
 
     let size: number

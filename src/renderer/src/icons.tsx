@@ -215,7 +215,148 @@ const PATHS = {
       <path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8" />
     </>
   ),
-  sparkle: <path d="M12 3.5 13.8 9l5.7 1.9-5.7 1.9L12 18.5l-1.8-5.7L4.5 11l5.7-1.9z" />
+  sparkle: <path d="M12 3.5 13.8 9l5.7 1.9-5.7 1.9L12 18.5l-1.8-5.7L4.5 11l5.7-1.9z" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  timer: (
+    <>
+      <circle cx="12" cy="13.5" r="7" />
+      <path d="M12 10v3.5l2.5 1.5M9.5 3h5M12 3v3.5" />
+    </>
+  ),
+  stopwatch: (
+    <>
+      <circle cx="12" cy="13.5" r="7" />
+      <path d="M12 13.5 15 10.5M10 3h4M18.5 6.5l1.2-1.2" />
+    </>
+  ),
+  globeClock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.3 3.5 5.2 3.5 8.5s-1.1 6.2-3.5 8.5c-2.4-2.3-3.5-5.2-3.5-8.5S9.6 5.8 12 3.5z" />
+    </>
+  ),
+  calculator: (
+    <>
+      <rect x="5" y="3" width="14" height="18" rx="3" />
+      <path d="M8.5 7.5h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" />
+    </>
+  ),
+  flame: <path d="M12 21c3.6 0 6-2.5 6-5.8 0-3.8-3-5.6-3.6-9.2-1.8 1.2-2.6 2.8-2.7 4.4-1-.8-1.6-1.9-1.8-3.2C7.5 9 6 11.4 6 14.6 6 18.3 8.4 21 12 21z" />,
+  apps: (
+    <>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="2" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="2" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="2" />
+      <path d="M16.75 13.5v6.5M13.5 16.75H20" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+      <circle cx="9" cy="10" r="1.8" />
+      <path d="m4 17 4.5-4.5 3.5 3.5 2.5-2.5 5 5" />
+    </>
+  ),
+  gauge: (
+    <>
+      <path d="M4.5 17a8 8 0 1 1 15 0" />
+      <path d="m12 13 3.5-4M12 13h.01" />
+    </>
+  ),
+  cloudSun: (
+    <>
+      <path d="M8 5.5V4M3.5 10H2M4.8 6.8 3.8 5.8M12.2 6.8l1-1" />
+      <path d="M5.4 12.4A3.5 3.5 0 1 1 11.6 9" />
+      <path d="M9 20a3.5 3.5 0 0 1-.4-7 5 5 0 0 1 9.6 1.3A3 3 0 0 1 17.8 20z" />
+    </>
+  ),
+  rss: (
+    <>
+      <path d="M5 19.5h.01M5 12a7.5 7.5 0 0 1 7.5 7.5M5 5a14.5 14.5 0 0 1 14.5 14.5" />
+    </>
+  ),
+  flag: <path d="M5.5 21V4M5.5 4.5h11l-2.2 4 2.2 4h-11" />,
+  swap: <path d="M7 4 4 7l3 3M4 7h12M17 14l3 3-3 3M20 17H8" />,
+  radio: (
+    <>
+      <rect x="3" y="8" width="18" height="12" rx="3" />
+      <circle cx="15.5" cy="14" r="2.5" />
+      <path d="M7 12.5h3M7 15.5h3M6 8l10-4.5" />
+    </>
+  ),
+  star: <path d="m12 4 2.4 5 5.4.7-4 3.8 1 5.4L12 16.3 7.2 18.9l1-5.4-4-3.8 5.4-.7z" />,
+  starFill: <path d="m12 4 2.4 5 5.4.7-4 3.8 1 5.4L12 16.3 7.2 18.9l1-5.4-4-3.8 5.4-.7z" fill="currentColor" />,
+  pin: <path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3zM12 13.5V20" />,
+  layout: (
+    <>
+      <rect x="3.5" y="4" width="7.5" height="9" rx="2" />
+      <rect x="13" y="4" width="7.5" height="5.5" rx="2" />
+      <rect x="13" y="11.5" width="7.5" height="8.5" rx="2" />
+      <rect x="3.5" y="15" width="7.5" height="5" rx="2" />
+    </>
+  ),
+  undo: <path d="M9 14 4.5 9.5 9 5M5 9.5h9.5a5 5 0 0 1 0 10H11" />,
+  fit: <path d="M12 3v6M9 6l3 3 3-3M12 21v-6M9 18l3-3 3 3M4 12h16" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5M12 8h.01" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M14 3.5H7.5A2 2 0 0 0 5.5 5.5v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3.5V8h4.5" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+      <path d="m3.5 7 8.5 6 8.5-6" />
+    </>
+  ),
+  chat: <path d="M5 18.5V6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H8.5z" />,
+  video: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="3.5" />
+      <path d="m10.5 9.5 4 2.5-4 2.5z" fill="currentColor" />
+    </>
+  ),
+  translate: (
+    <>
+      <path d="M4 5.5h9M8.5 4v1.5c0 4-2 7-4.5 8.5M6 9.5c1.3 2.2 3.4 3.8 6 4.5" />
+      <path d="m12.5 20 3.5-8.5 3.5 8.5M13.7 17.2h4.6" />
+    </>
+  ),
+  code: <path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.5 5.5l-3 13" />,
+  battery: (
+    <>
+      <rect x="3" y="7.5" width="16" height="9" rx="2.5" />
+      <path d="M21 10.5v3" />
+    </>
+  ),
+  package: (
+    <>
+      <path d="M12 3.5 20 8v8l-8 4.5L4 16V8z" />
+      <path d="M4 8l8 4.5L20 8M12 12.5v8" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </>
+  ),
+  bold: <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" />,
+  italic: <path d="M10 5h8M6 19h8M14 5l-4 14" />,
+  heading: <path d="M6 5v14M18 5v14M6 12h12" />,
+  list: <path d="M9 7h11M9 12h11M9 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01" />,
+  checklist: <path d="m3.5 7 1.5 1.5L8 5.5M3.5 15l1.5 1.5L8 13.5M11 7h9.5M11 15h9.5" />
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS

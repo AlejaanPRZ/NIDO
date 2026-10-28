@@ -2,10 +2,10 @@ import { useApp } from './context'
 import { Icon, type IconName } from './icons'
 
 const POINTS: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'grid', title: 'Widgets a tu medida', text: 'Arrástralos por la cabecera, cambia su tamaño desde la esquina y usa ⋯ para ampliar, plegar o duplicar.' },
-  { icon: 'briefcase', title: 'Tres espacios', text: 'Trabajo, Personal y Estudio tienen su propio panel. Cambia con Ctrl+1, 2 y 3.' },
-  { icon: 'cloud', title: 'Tus cuentas', text: 'Conecta Google Calendar y Notion en Ajustes → Conexiones. La música de tus apps aparece sola.' },
-  { icon: 'search', title: 'Todo a mano', text: 'Ctrl+K busca widgets, tareas y accesos. Todo se guarda solo en este equipo.' }
+  { icon: 'plus', title: 'Añade lo que uses', text: '«Añadir widget» abre el catálogo: notas, tareas, Pomodoro, tiempo, música, webs… en tamaño S, M o L.' },
+  { icon: 'grid', title: 'Colócalo a tu gusto', text: 'Arrastra por la cabecera, redimensiona desde la esquina y usa ⋯ para fijar, ajustar o ampliar.' },
+  { icon: 'briefcase', title: 'Espacios propios', text: 'Crea espacios con su icono y color; doble clic en una pestaña para editarla. Ctrl+1…9 para cambiar.' },
+  { icon: 'cloud', title: 'Tus cuentas', text: 'Google Calendar y Notion se conectan en Ajustes → Conexiones. Ctrl+K busca en todo.' }
 ]
 
 /** Mensaje de bienvenida: solo la primera vez (se puede volver a ver desde Ajustes → Ayuda). */

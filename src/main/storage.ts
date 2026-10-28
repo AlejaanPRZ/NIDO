@@ -41,11 +41,13 @@ function writeJsonSync(path: string, value: unknown): void {
 export function loadState(): unknown {
   const state = readJson<{ version?: number }>(statePath())
   if (!state || typeof state !== 'object') return null
-  if (state.version === 1) {
-    const backup = join(dataDir(), 'nido-state.v1-backup.json')
+  const CURRENT = 3
+  if (typeof state.version !== 'number' || state.version > CURRENT) return null
+  if (state.version < CURRENT) {
+    const backup = join(dataDir(), `nido-state.v${state.version}-backup.json`)
     if (!fs.existsSync(backup)) fs.copyFileSync(statePath(), backup)
   }
-  return state.version === 1 || state.version === 2 ? state : null
+  return state
 }
 
 export function saveState(state: AppState): Promise<void> {

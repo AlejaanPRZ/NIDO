@@ -11,7 +11,17 @@ export interface LayoutItem {
 // ---------- Datos de cada widget ----------
 
 export interface NotesData {
+  /** Markdown sencillo: **negrita**, *cursiva*, # títulos, - listas, - [ ] casillas */
   text: string
+  mode?: 'edit' | 'view'
+}
+
+export type Priority = 'alta' | 'media' | 'baja'
+
+export interface Subtask {
+  id: string
+  text: string
+  done: boolean
 }
 
 export interface Task {
@@ -19,6 +29,10 @@ export interface Task {
   text: string
   done: boolean
   createdAt: number
+  priority?: Priority
+  /** YYYY-MM-DD */
+  due?: string
+  subtasks?: Subtask[]
 }
 
 export type DueFilter = 'all' | 'overdue' | 'today' | 'week' | 'none'
@@ -124,6 +138,129 @@ export interface LinksData {
   browserId?: string
 }
 
+/** Temporizador que sobrevive a reinicios: si está en marcha se guarda la hora de fin. */
+export interface CountdownState {
+  running: boolean
+  /** Epoch ms en que termina (si está en marcha) */
+  endsAt?: number
+  /** Segundos que quedan (si está en pausa) */
+  remaining: number
+}
+
+export type PomodoroPhase = 'focus' | 'short' | 'long'
+
+export interface PomodoroData {
+  /** Minutos */
+  focus: number
+  short: number
+  long: number
+  /** Sesiones de foco antes del descanso largo */
+  rounds: number
+  autoStart: boolean
+  phase: PomodoroPhase
+  round: number
+  clock: CountdownState
+  /** Sesiones completadas hoy */
+  completed: { day: string; count: number }
+}
+
+export interface TimerData {
+  mode: 'timer' | 'stopwatch'
+  /** Segundos del temporizador */
+  duration: number
+  timer: CountdownState
+  stopwatch: { running: boolean; startedAt?: number; elapsed: number; laps: number[] }
+}
+
+export interface WorldClockData {
+  zones: { id: string; label: string; tz: string }[]
+}
+
+export interface CalculatorData {
+  history: { expr: string; result: string; at: number }[]
+}
+
+export interface Habit {
+  id: string
+  name: string
+  color: string
+  /** Días cumplidos, YYYY-MM-DD */
+  days: string[]
+}
+
+export interface HabitsData {
+  habits: Habit[]
+}
+
+/** Elemento de un lanzador: apunta a un id que el proceso principal tiene en su lista permitida. */
+export interface LauncherItem {
+  id: string
+  name: string
+  kind: 'app' | 'folder' | 'file'
+}
+
+export interface LauncherData {
+  items: LauncherItem[]
+}
+
+export interface ImagesData {
+  /** Ids de carpetas o imágenes elegidas por el usuario (lista permitida en main) */
+  sources: { id: string; name: string; kind: 'folder' | 'file' }[]
+  /** Segundos entre imágenes; 0 = manual */
+  interval: number
+  fit: 'cover' | 'contain'
+}
+
+export interface RecentData {
+  limit: number
+}
+
+export interface SystemData {
+  show: { cpu: boolean; memory: boolean; battery: boolean }
+}
+
+export interface Place {
+  name: string
+  admin?: string
+  country?: string
+  lat: number
+  lon: number
+}
+
+export interface WeatherData {
+  place?: Place
+  units: 'c' | 'f'
+}
+
+export interface RssData {
+  feeds: { id: string; url: string; title?: string }[]
+  limit: number
+}
+
+export interface HolidaysData {
+  /** ISO 3166-1 alfa-2 */
+  country: string
+  countdowns: { id: string; title: string; date: string }[]
+}
+
+export interface ConverterData {
+  mode: 'units' | 'currency'
+  units: { category: string; from: string; to: string; value: string }
+  currency: { from: string; to: string; amount: string }
+}
+
+export interface SearchData {
+  engine: string
+  /** Navegador externo; undefined = el de Ajustes */
+  browserId?: string
+}
+
+export interface RadioData {
+  stations: { id: string; name: string; url: string }[]
+  current?: string
+  volume: number
+}
+
 export interface WidgetDataMap {
   notes: NotesData
   tasks: TasksData
@@ -131,6 +268,21 @@ export interface WidgetDataMap {
   music: MusicData
   web: WebData
   links: LinksData
+  pomodoro: PomodoroData
+  timer: TimerData
+  worldclock: WorldClockData
+  calculator: CalculatorData
+  habits: HabitsData
+  launcher: LauncherData
+  images: ImagesData
+  recent: RecentData
+  system: SystemData
+  weather: WeatherData
+  rss: RssData
+  holidays: HolidaysData
+  converter: ConverterData
+  search: SearchData
+  radio: RadioData
 }
 
 export type WidgetType = keyof WidgetDataMap
@@ -141,6 +293,10 @@ interface WidgetBase {
   collapsed?: boolean
   /** Altura antes de plegar, para restaurarla */
   restoreH?: number
+  /** Fijado: no se mueve ni redimensiona al organizar o arrastrar otros */
+  pinned?: boolean
+  /** Entrada del catálogo de la que salió (p. ej. un panel web predefinido) */
+  catalogId?: string
 }
 
 export type Widget = {
@@ -156,6 +312,10 @@ export type Theme = 'system' | 'light' | 'dark'
 export interface Workspace {
   id: string
   name: string
+  /** Nombre de un icono de icons.tsx */
+  icon: string
+  /** Color de acento del espacio (hex) */
+  color: string
   widgets: Widget[]
   layout: LayoutItem[]
 }
@@ -165,14 +325,16 @@ export interface Settings {
   locked: boolean
   reduceTransparency: boolean
   reduceMotion: boolean
-  clock: { hour12: boolean; showSeconds: boolean }
+  clock: { hour12: boolean; showSeconds: boolean; date: 'long' | 'short' | 'hidden' }
   welcomeSeen: boolean
   /** 'system' o el id de un navegador detectado/añadido */
   defaultBrowser: string
+  /** Ids del catálogo marcados como favoritos */
+  favorites: string[]
 }
 
 export interface AppState {
-  version: 2
+  version: 3
   workspaces: Workspace[]
   activeWorkspace: string
   settings: Settings
@@ -243,6 +405,8 @@ export interface GoogleStatus {
   clientId: string
   hasClientSecret: boolean
   connected: boolean
+  /** Google revocó o caducó el acceso: hay que volver a conectar */
+  expired: boolean
   account?: string
   /** El cifrado del sistema (DPAPI) está disponible */
   encryption: boolean
@@ -317,6 +481,8 @@ export interface GoogleApi {
 
 export interface NotionStatus {
   connected: boolean
+  /** Notion rechazó el token guardado */
+  expired: boolean
   workspace?: string
   bot?: string
   encryption: boolean
@@ -395,6 +561,85 @@ export interface DataApi {
   openDataFolder(): Promise<Result<null>>
 }
 
+// ---------- Archivos, aplicaciones e imágenes (lista permitida en main) ----------
+
+export type PickKind = 'app' | 'folder' | 'file' | 'images' | 'imageFolder'
+
+export interface PickedItem {
+  id: string
+  name: string
+  path: string
+  kind: 'app' | 'folder' | 'file'
+}
+
+export interface RecentItem {
+  id: string
+  name: string
+  path: string
+  kind: 'app' | 'folder' | 'file'
+  at: number
+}
+
+export interface ImageEntry {
+  name: string
+  url: string
+}
+
+export interface FilesApi {
+  /** Diálogo del sistema; lo elegido pasa a la lista permitida. */
+  pick(kind: PickKind): Promise<Result<PickedItem[]>>
+  /** Abre con la aplicación predeterminada y lo anota en «Recientes». */
+  open(id: string): Promise<Result<null>>
+  reveal(id: string): Promise<Result<null>>
+  forget(id: string): Promise<Result<null>>
+  /** Imágenes de una carpeta o archivo de la lista permitida. */
+  images(id: string): Promise<Result<ImageEntry[]>>
+  recent(): Promise<Result<RecentItem[]>>
+  clearRecent(): Promise<Result<null>>
+}
+
+// ---------- Información pública sin cuenta ----------
+
+export interface WeatherReport {
+  current: { temperature: number; code: number; time: string }
+  daily: { date: string; code: number; max: number; min: number }[]
+  units: string
+  fetchedAt: number
+}
+
+export interface Holiday {
+  date: string
+  localName: string
+  name: string
+  global: boolean
+}
+
+export interface CurrencyRates {
+  base: string
+  /** Fecha de los tipos según la fuente */
+  date: string
+  rates: Record<string, number>
+  fetchedAt: number
+}
+
+export interface InfoApi {
+  geocode(query: string): Promise<Result<Place[]>>
+  weather(lat: number, lon: number, units: 'c' | 'f'): Promise<Result<WeatherReport>>
+  /** XML del feed (se interpreta en el renderer con DOMParser) */
+  feed(url: string): Promise<Result<string>>
+  holidays(country: string, year: number): Promise<Result<Holiday[]>>
+  rates(base: string): Promise<Result<CurrencyRates>>
+}
+
+export interface SystemStats {
+  /** 0–100, media de todos los núcleos desde la lectura anterior */
+  cpu: number
+  cores: number
+  memUsed: number
+  memTotal: number
+  uptime: number
+}
+
 /** API expuesta al renderer a través de contextBridge como `window.nido`. */
 export interface NidoApi {
   /** Estado tal cual está en disco (v1 o v2); el renderer lo migra. */
@@ -411,6 +656,9 @@ export interface NidoApi {
   notion: NotionApi
   browsers: BrowsersApi
   data: DataApi
+  files: FilesApi
+  info: InfoApi
+  system: { stats(): Promise<Result<SystemStats>> }
 }
 
 export const IPC = {
@@ -457,6 +705,25 @@ export const IPC = {
     importConfig: 'nido:data:import',
     backupCurrent: 'nido:data:backup',
     openDataFolder: 'nido:data:open-folder'
+  },
+  files: {
+    pick: 'nido:files:pick',
+    open: 'nido:files:open',
+    reveal: 'nido:files:reveal',
+    forget: 'nido:files:forget',
+    images: 'nido:files:images',
+    recent: 'nido:files:recent',
+    clearRecent: 'nido:files:clear-recent'
+  },
+  info: {
+    geocode: 'nido:info:geocode',
+    weather: 'nido:info:weather',
+    feed: 'nido:info:feed',
+    holidays: 'nido:info:holidays',
+    rates: 'nido:info:rates'
+  },
+  system: {
+    stats: 'nido:system:stats'
   }
 } as const
 

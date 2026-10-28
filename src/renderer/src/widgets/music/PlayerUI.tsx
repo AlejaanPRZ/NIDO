@@ -33,6 +33,11 @@ export interface PlayerUIProps {
   volume: Capability & { value: number; muted: boolean }
   onVolume(value: number): void
   onMute(): void
+  /**
+   * Fuentes externas: lo que la app no permite no se muestra (en vez de verse
+   * desactivado) y un indicador breve resume las limitaciones.
+   */
+  hideUnavailable?: boolean
 }
 
 const REPEAT_LABEL: Record<RepeatMode, string> = {
@@ -49,10 +54,12 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
   const [jumping, setJumping] = useState(false)
   const [jumpText, setJumpText] = useState('')
   const [jumpError, setJumpError] = useState<string | null>(null)
+  const [showLimits, setShowLimits] = useState(false)
 
   const shown = drag ?? p.position
   const pct = p.duration > 0 ? Math.min(100, (shown / p.duration) * 100) : 0
   const volumePct = (p.volume.muted ? 0 : p.volume.value) * 100
+  const hide = (cap: Capability): boolean => !!p.hideUnavailable && !cap.enabled
 
   const commitSeek = (): void => {
     if (drag !== null) p.onSeek(drag)
@@ -74,12 +81,11 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
     setJumpError(null)
   }
 
-  // Motivos de lo que no está disponible, sin repetir, en una sola línea.
+  // Motivos de lo que no está disponible, sin repetir.
   const reasons = [
-    ...new Set(
-      [p.seek, p.shuffle, p.repeat, p.volume, p.prev, p.next].filter((c) => !c.enabled && c.reason).map((c) => c.reason!)
-    )
+    ...new Set([p.seek, p.shuffle, p.repeat, p.volume, p.prev, p.next].filter((c) => !c.enabled && c.reason).map((c) => c.reason!))
   ]
+  const canSeek = p.seek.enabled && p.duration > 0
 
   return (
     <div className="player">
@@ -103,23 +109,32 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
         </div>
       </div>
 
-      <div className="seek-wrap" title={p.seek.enabled ? undefined : p.seek.reason}>
-        <input
-          className="range seek"
-          type="range"
-          aria-label="Posición en la canción"
-          min={0}
-          max={p.duration || 0}
-          step={0.5}
-          value={Math.min(shown, p.duration || 0)}
-          disabled={!p.seek.enabled || p.duration <= 0}
-          style={{ '--pct': `${pct}%` } as CSSProperties}
-          onChange={(e) => setDrag(Number(e.target.value))}
-          onPointerUp={commitSeek}
-          onKeyUp={commitSeek}
-          onBlur={() => drag !== null && commitSeek()}
-        />
-      </div>
+      {hide(p.seek) ? (
+        // Sin búsqueda: solo una barra de progreso, sin tirador.
+        p.duration > 0 && (
+          <div className="progress-static" aria-label={`Progreso ${formatTime(shown)} de ${formatTime(p.duration)}`}>
+            <i style={{ width: `${pct}%` }} />
+          </div>
+        )
+      ) : (
+        <div className="seek-wrap" title={p.seek.enabled ? undefined : p.seek.reason}>
+          <input
+            className="range seek"
+            type="range"
+            aria-label="Posición en la canción"
+            min={0}
+            max={p.duration || 0}
+            step={0.5}
+            value={Math.min(shown, p.duration || 0)}
+            disabled={!canSeek}
+            style={{ '--pct': `${pct}%` } as CSSProperties}
+            onChange={(e) => setDrag(Number(e.target.value))}
+            onPointerUp={commitSeek}
+            onKeyUp={commitSeek}
+            onBlur={() => drag !== null && commitSeek()}
+          />
+        </div>
+      )}
 
       <div className="times">
         {jumping ? (
@@ -147,11 +162,10 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
               Ir
             </button>
           </form>
-        ) : (
+        ) : canSeek ? (
           <button
             className="time-btn mono"
-            disabled={!p.seek.enabled || p.duration <= 0}
-            title={tip('Ir a un minuto concreto', p.seek)}
+            title="Ir a un minuto concreto"
             onClick={() => {
               setJumpText(formatTime(p.position))
               setJumping(true)
@@ -159,77 +173,89 @@ export function PlayerUI(p: PlayerUIProps): JSX.Element {
           >
             {formatTime(shown)}
           </button>
+        ) : (
+          <span className="mono muted">{p.duration > 0 ? formatTime(shown) : ''}</span>
         )}
-        <span className="mono muted">{p.duration > 0 ? formatTime(p.duration) : '--:--'}</span>
+        <span className="mono muted">{p.duration > 0 ? formatTime(p.duration) : ''}</span>
       </div>
       {jumpError && <div className="field-error">{jumpError}</div>}
 
       <div className="transport">
-        <button
-          className={`icon-btn ${p.shuffle.active ? 'on' : ''}`}
-          aria-pressed={p.shuffle.active}
-          disabled={!p.shuffle.enabled}
-          title={tip(p.shuffle.active ? 'Aleatorio: activado' : 'Aleatorio: desactivado', p.shuffle)}
-          onClick={p.onShuffle}
-        >
-          <Icon name="shuffle" size={16} />
-        </button>
+        {!hide(p.shuffle) && (
+          <button
+            className={`icon-btn ${p.shuffle.active ? 'on' : ''}`}
+            aria-pressed={p.shuffle.active}
+            disabled={!p.shuffle.enabled}
+            title={tip(p.shuffle.active ? 'Aleatorio: activado' : 'Aleatorio: desactivado', p.shuffle)}
+            onClick={p.onShuffle}
+          >
+            <Icon name="shuffle" size={16} />
+          </button>
+        )}
         <button className="icon-btn big" disabled={!p.prev.enabled} title={tip('Anterior', p.prev)} onClick={p.onPrev}>
           <Icon name="skipBack" size={18} />
         </button>
-        <button
-          className="play-btn"
-          disabled={!p.toggle.enabled}
-          title={tip(p.playing ? 'Pausa' : 'Reproducir', p.toggle)}
-          onClick={p.onToggle}
-        >
+        <button className="play-btn" disabled={!p.toggle.enabled} title={tip(p.playing ? 'Pausa' : 'Reproducir', p.toggle)} onClick={p.onToggle}>
           <Icon name={p.playing ? 'pause' : 'play'} size={20} />
         </button>
         <button className="icon-btn big" disabled={!p.next.enabled} title={tip('Siguiente', p.next)} onClick={p.onNext}>
           <Icon name="skipForward" size={18} />
         </button>
-        <button
-          className={`icon-btn ${p.repeat.mode !== 'off' ? 'on' : ''}`}
-          aria-pressed={p.repeat.mode !== 'off'}
-          disabled={!p.repeat.enabled}
-          title={tip(REPEAT_LABEL[p.repeat.mode], p.repeat)}
-          onClick={p.onRepeat}
-        >
-          <Icon name={p.repeat.mode === 'one' ? 'repeatOne' : 'repeat'} size={16} />
-        </button>
+        {!hide(p.repeat) && (
+          <button
+            className={`icon-btn ${p.repeat.mode !== 'off' ? 'on' : ''}`}
+            aria-pressed={p.repeat.mode !== 'off'}
+            disabled={!p.repeat.enabled}
+            title={tip(REPEAT_LABEL[p.repeat.mode], p.repeat)}
+            onClick={p.onRepeat}
+          >
+            <Icon name={p.repeat.mode === 'one' ? 'repeatOne' : 'repeat'} size={16} />
+          </button>
+        )}
       </div>
 
-      <div className="volume-row" title={p.volume.enabled ? undefined : p.volume.reason}>
-        <button
-          className="icon-btn"
-          disabled={!p.volume.enabled}
-          aria-pressed={p.volume.muted}
-          title={tip(p.volume.muted ? 'Quitar silencio' : 'Silenciar', p.volume)}
-          onClick={p.onMute}
-        >
-          <Icon name={p.volume.muted || p.volume.value === 0 ? 'volumeOff' : 'volume'} size={16} />
-        </button>
-        <input
-          className="range volume"
-          type="range"
-          aria-label="Volumen"
-          min={0}
-          max={1}
-          step={0.01}
-          value={p.volume.muted ? 0 : p.volume.value}
-          disabled={!p.volume.enabled}
-          style={{ '--pct': `${volumePct}%` } as CSSProperties}
-          onChange={(e) => p.onVolume(Number(e.target.value))}
-        />
-        <span className="mono muted vol-num">{p.volume.enabled ? Math.round(volumePct) : '—'}</span>
-      </div>
-
-      {reasons.length > 0 && (
-        <p className="player-note">
-          <Icon name="help" size={13} />
-          <span>{reasons.join(' ')}</span>
-        </p>
+      {!hide(p.volume) && (
+        <div className="volume-row" title={p.volume.enabled ? undefined : p.volume.reason}>
+          <button
+            className="icon-btn"
+            disabled={!p.volume.enabled}
+            aria-pressed={p.volume.muted}
+            title={tip(p.volume.muted ? 'Quitar silencio' : 'Silenciar', p.volume)}
+            onClick={p.onMute}
+          >
+            <Icon name={p.volume.muted || p.volume.value === 0 ? 'volumeOff' : 'volume'} size={16} />
+          </button>
+          <input
+            className="range volume"
+            type="range"
+            aria-label="Volumen"
+            min={0}
+            max={1}
+            step={0.01}
+            value={p.volume.muted ? 0 : p.volume.value}
+            disabled={!p.volume.enabled}
+            style={{ '--pct': `${volumePct}%` } as CSSProperties}
+            onChange={(e) => p.onVolume(Number(e.target.value))}
+          />
+          <span className="mono muted vol-num">{p.volume.enabled ? Math.round(volumePct) : '—'}</span>
+        </div>
       )}
+
+      {reasons.length > 0 &&
+        (p.hideUnavailable ? (
+          <>
+            <button className="limits-chip" title={reasons.join(' ')} aria-expanded={showLimits} onClick={() => setShowLimits(!showLimits)}>
+              <Icon name="info" size={12} />
+              Controles limitados
+            </button>
+            {showLimits && <p className="player-note">{reasons.join(' ')}</p>}
+          </>
+        ) : (
+          <p className="player-note">
+            <Icon name="help" size={13} />
+            <span>{reasons.join(' ')}</span>
+          </p>
+        ))}
     </div>
   )
 }

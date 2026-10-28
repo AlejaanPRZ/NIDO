@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react'
-import type { AppState } from '../../shared/types'
+import { useEffect, useState, type CSSProperties } from 'react'
+import type { AppState, Settings } from '../../shared/types'
 import { useApp } from './context'
-import { Icon } from './icons'
-import { WIDGETS, WIDGET_TYPES } from './registry'
-import { WORKSPACES } from './store'
+import { Icon, type IconName } from './icons'
 import { MenuButton } from './ui/Menu'
 
 /** Reloj con la zona horaria y el idioma del equipo. */
-export function Clock({ hour12, showSeconds }: { hour12: boolean; showSeconds: boolean }): JSX.Element {
+export function Clock({ clock }: { clock: Settings['clock'] }): JSX.Element {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     // Se alinea con el cambio de segundo para que no vaya a saltos irregulares.
@@ -23,83 +21,103 @@ export function Clock({ hour12, showSeconds }: { hour12: boolean; showSeconds: b
   const time = new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
     minute: '2-digit',
-    second: showSeconds ? '2-digit' : undefined,
-    hour12
+    second: clock.showSeconds ? '2-digit' : undefined,
+    hour12: clock.hour12
   }).format(now)
-  const date = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long' }).format(now)
+  const date =
+    clock.date === 'hidden'
+      ? null
+      : new Intl.DateTimeFormat(undefined, clock.date === 'short' ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'long' }).format(now)
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   return (
-    <div className="clock" title={`Zona horaria: ${zone}`} aria-live="off">
+    <div className="clock" title={`${new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(now)} · ${zone}`} aria-live="off">
       <time className="clock-time" dateTime={now.toISOString()}>
         {time}
       </time>
-      <span className="clock-date">{date}</span>
+      {date && <span className="clock-date">{date}</span>}
     </div>
   )
 }
 
-export function Topbar({ state, onSearch }: { state: AppState; onSearch(): void }): JSX.Element {
+interface TopbarProps {
+  state: AppState
+  onSearch(): void
+  onCatalog(): void
+  onEditWorkspace(id: string): void
+  onArrange(): void
+}
+
+export function Topbar({ state, onSearch, onCatalog, onEditWorkspace, onArrange }: TopbarProps): JSX.Element {
   const { dispatch, openSettings } = useApp()
-  const { locked, clock } = state.settings
+  const { locked } = state.settings
 
   return (
-    <header className="topbar glass">
+    <header className="topbar glass-bar">
       <div className="tb-left">
         <span className="brand" aria-label="Nido">
           <span className="brand-mark" aria-hidden />
-          Nido
+          <span className="brand-name">Nido</span>
         </span>
-        <div className="segmented workspaces" role="tablist" aria-label="Espacios">
-          {WORKSPACES.map((w, i) => {
-            const count = state.workspaces.find((x) => x.id === w.id)?.widgets.length ?? 0
+        <nav className="ws-tabs" role="tablist" aria-label="Espacios">
+          {state.workspaces.map((w, i) => {
+            const active = state.activeWorkspace === w.id
             return (
               <button
                 key={w.id}
                 role="tab"
-                aria-selected={state.activeWorkspace === w.id}
-                className={state.activeWorkspace === w.id ? 'active' : ''}
-                title={`${w.name} · ${count} widget${count === 1 ? '' : 's'} (Ctrl+${i + 1})`}
+                aria-selected={active}
+                className={`ws-tab ${active ? 'active' : ''}`}
+                style={{ '--ws': w.color } as CSSProperties}
+                title={`${w.name} · ${w.widgets.length} widget${w.widgets.length === 1 ? '' : 's'}${i < 9 ? ` (Ctrl+${i + 1})` : ''}\nDoble clic o clic derecho para editar`}
                 onClick={() => dispatch({ type: 'workspace', id: w.id })}
+                onDoubleClick={() => onEditWorkspace(w.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  onEditWorkspace(w.id)
+                }}
               >
-                <Icon name={w.icon} size={13} />
+                <span className="ws-icon">
+                  <Icon name={w.icon as IconName} size={13} />
+                </span>
                 <span className="ws-name">{w.name}</span>
               </button>
             )
           })}
-        </div>
+          <button className="icon-btn small ws-add" title="Nuevo espacio" aria-label="Nuevo espacio" onClick={() => dispatch({ type: 'addWorkspace' })}>
+            <Icon name="plus" size={13} />
+          </button>
+        </nav>
       </div>
 
-      <Clock hour12={clock.hour12} showSeconds={clock.showSeconds} />
+      <Clock clock={state.settings.clock} />
 
       <div className="tb-right">
-        <button className="search-btn" onClick={onSearch} title="Buscar widgets, tareas y accesos (Ctrl+K)">
+        <button className="search-btn" onClick={onSearch} title="Buscar y comandos (Ctrl+K)" aria-label="Buscar y comandos">
           <Icon name="search" size={14} />
           <span className="search-label">Buscar</span>
           <kbd>Ctrl K</kbd>
         </button>
         <MenuButton
-          title="Añadir widget"
-          className="icon-btn tb-btn"
-          disabled={locked}
-          items={WIDGET_TYPES.map((type) => ({
-            label: WIDGETS[type].label,
-            icon: WIDGETS[type].icon,
-            hint: WIDGETS[type].description,
-            onSelect: () => dispatch({ type: 'add', widgetType: type })
-          }))}
+          title={locked ? 'Distribución bloqueada: no se puede mover nada' : 'Modo edición: puedes mover y redimensionar'}
+          className={`mode-pill ${locked ? 'locked' : 'editing'}`}
+          items={() => [
+            { label: locked ? 'Desbloquear distribución' : 'Bloquear distribución', icon: locked ? 'unlock' : 'lock', hint: 'Ctrl+L', onSelect: () => dispatch({ type: 'settings', patch: { locked: !locked } }) },
+            { label: 'Organizar automáticamente', icon: 'layout', disabled: locked, onSelect: onArrange },
+            { separator: true },
+            { label: 'Editar este espacio…', icon: 'edit', onSelect: () => onEditWorkspace(state.activeWorkspace) },
+            { label: 'Nuevo espacio', icon: 'plus', onSelect: () => dispatch({ type: 'addWorkspace' }) }
+          ]}
         >
-          <Icon name="plus" size={16} />
+          <Icon name={locked ? 'lock' : 'edit'} size={13} />
+          <span className="mode-label">{locked ? 'Bloqueado' : 'Editando'}</span>
+          <Icon name="chevronDown" size={11} />
         </MenuButton>
-        <button
-          className={`icon-btn tb-btn ${locked ? 'on' : ''}`}
-          aria-pressed={locked}
-          title={locked ? 'Distribución bloqueada (Ctrl+L)' : 'Bloquear distribución (Ctrl+L)'}
-          onClick={() => dispatch({ type: 'settings', patch: { locked: !locked } })}
-        >
-          <Icon name={locked ? 'lock' : 'unlock'} size={15} />
+        <button className="btn primary small add-widget" onClick={onCatalog} disabled={locked} title={locked ? 'Desbloquea la distribución para añadir widgets' : 'Abrir el catálogo de widgets'}>
+          <Icon name="plus" size={14} />
+          <span className="add-label">Añadir widget</span>
         </button>
-        <button className="icon-btn tb-btn" title="Ajustes (Ctrl+,)" onClick={() => openSettings()}>
+        <button className="icon-btn tb-btn" title="Ajustes (Ctrl+,)" aria-label="Ajustes" onClick={() => openSettings()}>
           <Icon name="settings" size={16} />
         </button>
       </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { NotionSchema, NotionStatus, NotionTaskConfig, NotionValue, TaskFilters } from '../../../../shared/types'
-import { publishSearchItems, useApp } from '../../context'
+import { publishSearchItems, useActive, useApp, useInterval } from '../../context'
 import { Icon } from '../../icons'
 import { EmptyState, Spinner } from '../../ui/controls'
 import { Modal } from '../../ui/Modal'
@@ -136,11 +136,8 @@ function NotionList({
     setLastSync(new Date())
   }, [config, onAuthError])
 
-  useEffect(() => {
-    void load()
-    const timer = setInterval(() => void load(), REFRESH_MS)
-    return () => clearInterval(timer)
-  }, [load])
+  // Solo se consulta mientras el widget se ve; al volver a verse se recarga.
+  useInterval(() => void load(), REFRESH_MS, useActive())
 
   useEffect(() => {
     publishSearchItems(

@@ -33,7 +33,7 @@ export const hasOpenLayer = (): boolean => escapeStack.length > 0
 interface ModalProps {
   title?: string
   onClose(): void
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   footer?: ReactNode
   children: ReactNode
   className?: string

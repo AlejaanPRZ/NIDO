@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useActive } from '../../context'
 import type { CalEvent, ErrorCode, GoogleCalendar, GoogleStatus } from '../../../../shared/types'
 import { eventKey } from './events'
 
@@ -114,11 +115,16 @@ export function useGoogleCalendar(enabled: boolean, selected: string[] | undefin
     // Cada refresco recarga `calendars` (nuevo array), y eso basta para volver a pedir los eventos.
   }, [connected, calendars, idsKey, rangesKey])
 
+  // Refresco periódico solo mientras el widget se ve (la caché de main evita repetir consultas).
+  const active = useActive()
+  const wasActive = useRef(active)
   useEffect(() => {
-    if (!connected) return
+    if (active && !wasActive.current) setTick((t) => t + 1) // al volver a verse, datos frescos
+    wasActive.current = active
+    if (!connected || !active) return
     const timer = setInterval(() => setTick((t) => t + 1), REFRESH_MS)
     return () => clearInterval(timer)
-  }, [connected])
+  }, [connected, active])
 
   return {
     status,

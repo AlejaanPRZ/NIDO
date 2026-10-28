@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import type { AppState } from '../../shared/types'
 import { getSearchItems, useApp } from './context'
 import { Icon, type IconName } from './icons'
-import { WIDGETS, WIDGET_TYPES } from './registry'
-import { WORKSPACES } from './store'
+import { CATALOG } from './catalog'
+import { WIDGETS } from './registry'
 import { toast } from './ui/feedback'
 import { useEscape } from './ui/Modal'
 import { hostOf, normalizeText } from './util'
@@ -25,12 +25,18 @@ export function CommandPalette({
   state,
   onClose,
   onFocusWidget,
-  onShowWelcome
+  onShowWelcome,
+  onCatalog,
+  onArrange,
+  onUndoArrange
 }: {
   state: AppState
   onClose(): void
   onFocusWidget(id: string): void
   onShowWelcome(): void
+  onCatalog(): void
+  onArrange(): void
+  onUndoArrange?: () => void
 }): JSX.Element {
   const { dispatch, openSettings, settings } = useApp()
   const [query, setQuery] = useState('')
@@ -73,6 +79,18 @@ export function CommandPalette({
             }
           }
         }
+        if (w.type === 'launcher') {
+          for (const item of w.data.items) {
+            all.push({
+              id: `x:${w.id}:${item.id}`,
+              group: 'Accesos',
+              icon: item.kind === 'app' ? 'apps' : item.kind === 'folder' ? 'folder' : 'file',
+              label: item.name,
+              detail: `${item.kind === 'app' ? 'Aplicación' : item.kind === 'folder' ? 'Carpeta' : 'Documento'} · ${w.title}`,
+              run: () => void window.nido.files.open(item.id).then((r) => !r.ok && toast(r.error, 'error'))
+            })
+          }
+        }
         if (w.type === 'notes' && w.data.text.trim()) {
           all.push({ id: `n:${w.id}`, group: 'Notas', icon: 'notes', label: w.data.text.trim().split('\n')[0].slice(0, 80), detail: `${w.title} · ${ws.name}`, run: () => onFocusWidget(w.id) })
         }
@@ -90,21 +108,29 @@ export function CommandPalette({
       }
     }
     const actions: Item[] = [
-      ...WORKSPACES.map((w, i) => ({
+      { id: 'a:catalog', group: 'Acciones', icon: 'plus', label: 'Añadir widget…', detail: 'Catálogo · Ctrl+Mayús+A', run: onCatalog },
+      ...state.workspaces.map((w, i) => ({
         id: `a:ws:${w.id}`,
         group: 'Acciones',
-        icon: w.icon,
+        icon: w.icon as IconName,
         label: `Ir a ${w.name}`,
-        detail: `Ctrl+${i + 1}`,
+        detail: i < 9 ? `Ctrl+${i + 1}` : undefined,
         run: () => dispatch({ type: 'workspace', id: w.id })
       })),
-      ...WIDGET_TYPES.map((t) => ({
-        id: `a:add:${t}`,
-        group: 'Acciones',
-        icon: 'plus' as IconName,
-        label: `Añadir ${WIDGETS[t].label.toLowerCase()}`,
-        detail: WIDGETS[t].description,
-        run: () => (settings.locked ? toast('La distribución está bloqueada.', 'info') : dispatch({ type: 'add', widgetType: t }))
+      { id: 'a:newws', group: 'Acciones', icon: 'plus', label: 'Nuevo espacio', run: () => dispatch({ type: 'addWorkspace' }) },
+      { id: 'a:arrange', group: 'Acciones', icon: 'layout', label: 'Organizar automáticamente', detail: 'Espacio actual', run: onArrange },
+      ...(onUndoArrange ? [{ id: 'a:undo', group: 'Acciones', icon: 'undo' as IconName, label: 'Deshacer la organización', run: onUndoArrange }] : []),
+      // Añadir directamente lo que está disponible en el catálogo.
+      ...CATALOG.filter((e) => e.status === 'disponible' && e.widget).map((e) => ({
+        id: `a:add:${e.id}`,
+        group: 'Añadir',
+        icon: e.icon,
+        label: `Añadir ${e.title}`,
+        detail: e.description,
+        run: () =>
+          settings.locked
+            ? toast('La distribución está bloqueada.', 'info')
+            : dispatch({ type: 'add', widgetType: e.widget!, data: e.data, title: e.widgetTitle, catalogId: e.id })
       })),
       { id: 'a:settings', group: 'Acciones', icon: 'settings', label: 'Abrir ajustes', detail: 'Ctrl+,', run: () => openSettings() },
       { id: 'a:connections', group: 'Acciones', icon: 'cloud', label: 'Conexiones (Google, Notion)', run: () => openSettings('conexiones') },
@@ -114,7 +140,7 @@ export function CommandPalette({
       { id: 'a:welcome', group: 'Acciones', icon: 'help', label: 'Ver la bienvenida', detail: 'F1', run: onShowWelcome }
     ]
     return [...all, ...actions]
-  }, [state, settings, dispatch, openSettings, onFocusWidget, onShowWelcome])
+  }, [state, settings, dispatch, openSettings, onFocusWidget, onShowWelcome, onCatalog, onArrange, onUndoArrange])
 
   const results = useMemo(() => {
     const terms = normalizeText(query).split(/\s+/).filter(Boolean)

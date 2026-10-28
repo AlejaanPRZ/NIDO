@@ -13,8 +13,8 @@ const configPath = (): string => join(app.getPath('userData'), 'integrations.jso
 export type SecretName = 'google.clientSecret' | 'google.refreshToken' | 'notion.token'
 
 export interface IntegrationsConfig {
-  google?: { clientId?: string; account?: string }
-  notion?: { workspace?: string; bot?: string }
+  google?: { clientId?: string; account?: string; expired?: boolean }
+  notion?: { workspace?: string; bot?: string; expired?: boolean }
   browsers?: { custom?: { id: string; name: string; path: string }[] }
 }
 

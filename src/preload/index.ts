@@ -57,7 +57,10 @@ const api: NidoApi = {
   google: invokers<NidoApi['google']>(IPC.google),
   notion: invokers<NidoApi['notion']>(IPC.notion),
   browsers: invokers<NidoApi['browsers']>(IPC.browsers),
-  data: invokers<NidoApi['data']>(IPC.data)
+  data: invokers<NidoApi['data']>(IPC.data),
+  files: invokers<NidoApi['files']>(IPC.files),
+  info: invokers<NidoApi['info']>(IPC.info),
+  system: invokers<NidoApi['system']>(IPC.system)
 }
 
 contextBridge.exposeInMainWorld('nido', api)

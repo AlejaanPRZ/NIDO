@@ -5,9 +5,10 @@ import type { ErrorCode, Result } from '../shared/types'
 export class NidoError extends Error {
   constructor(
     public code: ErrorCode,
-    message: string
+    message: string,
+    cause?: unknown
   ) {
-    super(message)
+    super(message, { cause })
   }
 }
 

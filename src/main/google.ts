@@ -41,6 +41,7 @@ async function status(): Promise<GoogleStatus> {
     clientId: config.clientId ?? '',
     hasClientSecret: !!(await getSecret('google.clientSecret')),
     connected: !!(await getSecret('google.refreshToken')),
+    expired: !!config.expired,
     account: config.account,
     encryption: await encryptionAvailable()
   }
@@ -68,13 +69,35 @@ async function setCredentials(clientId: string, clientSecret: string): Promise<G
   return status()
 }
 
-function forgetAccount(): void {
+/** expired: Google revocó o caducó el acceso (no es una desconexión voluntaria). */
+function forgetAccount(expired = false): void {
   accessToken = null
   calendarColors.clear()
+  invalidate()
   deleteSecret('google.refreshToken')
   updateConfig((c) => {
-    if (c.google) delete c.google.account
+    if (!c.google) return
+    delete c.google.account
+    c.google.expired = expired
   })
+}
+
+// ---------- Caché compartida entre widgets ----------
+// Varios calendarios en pantalla piden lo mismo: se responde desde caché y
+// nunca hay dos peticiones iguales en curso. Las escrituras la invalidan.
+
+const CALENDARS_TTL = 5 * 60_000
+const EVENTS_TTL = 60_000
+let calendarsCache: { at: number; value: Promise<GoogleCalendar[]> } | null = null
+const eventsCache = new Map<string, { at: number; value: Promise<GoogleEventsResult> }>()
+
+function invalidate(): void {
+  calendarsCache = null
+  eventsCache.clear()
+}
+
+function cached<T>(entry: { at: number; value: Promise<T> } | null | undefined, ttl: number): Promise<T> | null {
+  return entry && Date.now() - entry.at < ttl ? entry.value : null
 }
 
 const PAGE = (title: string, body: string): string => `<!doctype html><html lang="es"><meta charset="utf-8">
@@ -158,8 +181,13 @@ async function tokenRequest(body: Record<string, string>): Promise<any> {
   const json = await readJson(res)
   if (!res.ok) {
     if (json?.error === 'invalid_grant') {
-      forgetAccount()
+      forgetAccount(true)
       throw new NidoError('auth', 'Google ha revocado o caducado el acceso. Vuelve a conectar la cuenta.')
+    }
+    // La guía oficial marca el secreto como opcional con PKCE, pero Google lo
+    // exige para muchos clientes «de escritorio». Si falta, se pide con una acción clara.
+    if (/client_secret/i.test(String(json?.error_description ?? ''))) {
+      throw new NidoError('config', 'Google pide el secreto de cliente para este cliente. Añádelo en Opciones avanzadas y vuelve a conectar.')
     }
     if (json?.error === 'invalid_client' || json?.error === 'unauthorized_client') {
       throw new NidoError('config', 'Google rechaza las credenciales del cliente. Revisa el ID y el secreto en Ajustes.')
@@ -187,7 +215,7 @@ async function connect(): Promise<GoogleStatus> {
     const calendars = await listCalendars()
     const primary = calendars.find((c) => c.primary)
     updateConfig((c) => {
-      c.google = { ...c.google, account: primary?.id }
+      c.google = { ...c.google, account: primary?.id, expired: false }
     })
     return status()
   })().finally(() => {
@@ -357,19 +385,43 @@ export function registerGoogle(): void {
   )
   handleResult(IPC.google.connect, () => connect())
   handleResult(IPC.google.disconnect, () => disconnect())
-  handleResult(IPC.google.calendars, () => listCalendars())
-  handleResult(IPC.google.events, (query: GoogleEventsQuery) => listEvents(query))
-  handleResult(IPC.google.createEvent, async (calendarId: string, input: EventInput) =>
-    toCalEvent(await api<any>(eventPath(calendarId), { method: 'POST', body: JSON.stringify(eventBody(input, false)) }), calendarId)
-  )
-  handleResult(IPC.google.updateEvent, async (calendarId: string, eventId: string, input: EventInput) =>
-    toCalEvent(
-      await api<any>(eventPath(calendarId, eventId), { method: 'PATCH', body: JSON.stringify(eventBody(input, true)) }),
-      calendarId
+  handleResult(IPC.google.calendars, () => {
+    const hit = cached(calendarsCache, CALENDARS_TTL)
+    if (hit) return hit
+    const value = listCalendars()
+    calendarsCache = { at: Date.now(), value }
+    value.catch(() => (calendarsCache = null))
+    return value
+  })
+  handleResult(IPC.google.events, (query: GoogleEventsQuery) => {
+    const key = JSON.stringify([query.calendarIds, query.timeMin, query.timeMax])
+    const hit = cached(eventsCache.get(key), EVENTS_TTL)
+    if (hit) return hit
+    const value = listEvents(query)
+    eventsCache.set(key, { at: Date.now(), value })
+    value.catch(() => eventsCache.delete(key))
+    while (eventsCache.size > 50) eventsCache.delete(eventsCache.keys().next().value!)
+    return value
+  })
+  // Escrituras: se invalida la caché al terminar (también si fallan).
+  const writing = <T>(op: () => Promise<T>): Promise<T> => op().finally(invalidate)
+  handleResult(IPC.google.createEvent, (calendarId: string, input: EventInput) =>
+    writing(async () =>
+      toCalEvent(await api<any>(eventPath(calendarId), { method: 'POST', body: JSON.stringify(eventBody(input, false)) }), calendarId)
     )
   )
-  handleResult(IPC.google.deleteEvent, async (calendarId: string, eventId: string) => {
-    await api(eventPath(calendarId, eventId), { method: 'DELETE' })
-    return null
-  })
+  handleResult(IPC.google.updateEvent, (calendarId: string, eventId: string, input: EventInput) =>
+    writing(async () =>
+      toCalEvent(
+        await api<any>(eventPath(calendarId, eventId), { method: 'PATCH', body: JSON.stringify(eventBody(input, true)) }),
+        calendarId
+      )
+    )
+  )
+  handleResult(IPC.google.deleteEvent, (calendarId: string, eventId: string) =>
+    writing(async () => {
+      await api(eventPath(calendarId, eventId), { method: 'DELETE' })
+      return null
+    })
+  )
 }

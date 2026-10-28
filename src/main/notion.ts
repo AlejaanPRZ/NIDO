@@ -22,6 +22,7 @@ async function status(): Promise<NotionStatus> {
   const config = getConfig().notion ?? {}
   return {
     connected: !!(await getSecret('notion.token')),
+    expired: !!config.expired,
     workspace: config.workspace,
     bot: config.bot,
     encryption: await encryptionAvailable()
@@ -42,13 +43,22 @@ function apiError(status: number, json: any): NidoError {
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+const MAX_ATTEMPTS = 3
+
 async function call<T>(path: string, init: RequestInit = {}, explicitToken?: string, attempt = 0): Promise<T> {
   const token = explicitToken ?? (await getSecret('notion.token'))
   if (!token) throw new NidoError('auth', 'No hay ninguna cuenta de Notion conectada.')
+  // Se puede repetir sin efectos duplicados: lecturas, consultas y PATCH.
+  const idempotent = (init.method ?? 'GET') !== 'POST' || path.endsWith('/query') || path === '/search'
+  const backoff = async (seconds?: number): Promise<T> => {
+    await wait(seconds ? Math.min(seconds, 10) * 1000 : 700 * 2 ** attempt)
+    return call(path, init, explicitToken, attempt + 1)
+  }
   let res: Response
   try {
     res = await fetch(`${API}${path}`, {
       ...init,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         ...init.headers,
         Authorization: `Bearer ${token}`,
@@ -57,18 +67,27 @@ async function call<T>(path: string, init: RequestInit = {}, explicitToken?: str
       }
     })
   } catch {
+    if (idempotent && attempt < MAX_ATTEMPTS - 1) return backoff()
     throw new NidoError('network', 'No hay conexión con Notion.')
   }
-  // Límite de ritmo o conflicto puntual: un reintento respetando Retry-After.
-  if ((res.status === 429 || res.status === 409) && attempt < 1) {
-    const retryAfter = Number(res.headers.get('retry-after')) || 1
-    await wait(Math.min(retryAfter, 10) * 1000)
-    return call(path, init, token, attempt + 1)
-  }
+  // Límite de ritmo o conflicto puntual: reintento con espera progresiva (respetando Retry-After).
+  const retry = res.status === 429 || res.status === 409 || (res.status >= 500 && idempotent)
+  if (retry && attempt < MAX_ATTEMPTS - 1) return backoff(Number(res.headers.get('retry-after')) || undefined)
   const json = await readJson(res)
+  if (res.status === 401 && !explicitToken) {
+    // El token guardado ya no vale (revocado o integración borrada).
+    deleteSecret('notion.token')
+    updateConfig((c) => {
+      c.notion = { ...c.notion, expired: true }
+    })
+  }
   if (!res.ok) throw apiError(res.status, json)
   return json as T
 }
+
+// Varios widgets pueden mostrar la misma base de datos: una consulta compartida.
+const QUERY_TTL = 30_000
+const queryCache = new Map<string, { at: number; value: Promise<NotionPage[]> }>()
 
 async function setToken(raw: string): Promise<NotionStatus> {
   const token = raw.trim()
@@ -79,8 +98,9 @@ async function setToken(raw: string): Promise<NotionStatus> {
   const me = await call<any>('/users/me', {}, token)
   await setSecret('notion.token', token)
   updateConfig((c) => {
-    c.notion = { bot: me?.name ?? undefined, workspace: me?.bot?.workspace_name ?? undefined }
+    c.notion = { bot: me?.name ?? undefined, workspace: me?.bot?.workspace_name ?? undefined, expired: false }
   })
+  queryCache.clear()
   return status()
 }
 
@@ -204,21 +224,35 @@ export function registerNotion(): void {
   handleResult(IPC.notion.disconnect, () => disconnect())
   handleResult(IPC.notion.search, (q: string) => search(String(q ?? '')))
   handleResult(IPC.notion.schema, (id: string) => schema(String(id)))
-  handleResult(IPC.notion.query, (id: string) => query(String(id)))
-  handleResult(IPC.notion.create, async (dataSourceId: string, values: Record<string, NotionValue>) =>
-    toPage(
-      await call<any>('/pages', {
-        method: 'POST',
-        body: JSON.stringify({ parent: { type: 'data_source_id', data_source_id: dataSourceId }, properties: toNotion(values) })
-      })
+  handleResult(IPC.notion.query, (id: string) => {
+    const key = String(id)
+    const hit = queryCache.get(key)
+    if (hit && Date.now() - hit.at < QUERY_TTL) return hit.value
+    const value = query(key)
+    queryCache.set(key, { at: Date.now(), value })
+    value.catch(() => queryCache.delete(key))
+    return value
+  })
+  // Las escrituras invalidan la caché de consultas al terminar.
+  const writing = <T>(op: () => Promise<T>): Promise<T> => op().finally(() => queryCache.clear())
+  handleResult(IPC.notion.create, (dataSourceId: string, values: Record<string, NotionValue>) =>
+    writing(async () =>
+      toPage(
+        await call<any>('/pages', {
+          method: 'POST',
+          body: JSON.stringify({ parent: { type: 'data_source_id', data_source_id: dataSourceId }, properties: toNotion(values) })
+        })
+      )
     )
   )
-  handleResult(IPC.notion.update, async (pageId: string, values: Record<string, NotionValue>) =>
-    toPage(
-      await call<any>(`/pages/${encodeURIComponent(pageId)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ properties: toNotion(values) })
-      })
+  handleResult(IPC.notion.update, (pageId: string, values: Record<string, NotionValue>) =>
+    writing(async () =>
+      toPage(
+        await call<any>(`/pages/${encodeURIComponent(pageId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ properties: toNotion(values) })
+        })
+      )
     )
   )
 }

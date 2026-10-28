@@ -19,6 +19,8 @@ export function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          // Sin type="button", dentro de un <form> enviaría el formulario al pulsarlo.
+          type="button"
           role="radio"
           aria-checked={o.value === value}
           className={o.value === value ? 'active' : ''}

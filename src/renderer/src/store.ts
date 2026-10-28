@@ -1,20 +1,24 @@
 import { useEffect, useReducer, useRef, useState, type Dispatch } from 'react'
 import type { AppState, LayoutItem, Settings, Widget, WidgetDataMap, WidgetType, Workspace } from '../../shared/types'
-import { COLLAPSED_H, WIDGETS, WIDGET_TYPES } from './registry'
+import { COLLAPSED_H, WIDGETS, WIDGET_TYPES, type SizeName } from './registry'
 import { uid } from './util'
 
 export const GRID_COLS = 12
 const SAVE_DELAY_MS = 400
 
-export const WORKSPACES: { id: string; name: string; icon: 'briefcase' | 'home' | 'book' }[] = [
-  { id: 'trabajo', name: 'Trabajo', icon: 'briefcase' },
-  { id: 'personal', name: 'Personal', icon: 'home' },
-  { id: 'estudio', name: 'Estudio', icon: 'book' }
+/** Espacios iniciales; el usuario puede crear, renombrar, reordenar y borrar. */
+const DEFAULT_WORKSPACES = [
+  { id: 'trabajo', name: 'Trabajo', icon: 'briefcase', color: '#0a84ff' },
+  { id: 'personal', name: 'Personal', icon: 'home', color: '#30d158' },
+  { id: 'estudio', name: 'Estudio', icon: 'book', color: '#bf5af2' }
 ]
+
+export const WORKSPACE_ICONS = ['briefcase', 'home', 'book', 'grid', 'sparkle', 'code', 'music', 'calendar', 'flame', 'star', 'globeClock', 'image'] as const
+export const WORKSPACE_COLORS = ['#0a84ff', '#30d158', '#bf5af2', '#ff9f0a', '#ff375f', '#5e5ce6', '#40c8e0', '#8e8e93']
 
 export type Action =
   | { type: 'hydrate'; state: AppState }
-  | { type: 'add'; widgetType: WidgetType }
+  | { type: 'add'; widgetType: WidgetType; data?: Partial<WidgetDataMap[WidgetType]>; title?: string; size?: SizeName; catalogId?: string }
   | { type: 'remove'; id: string }
   | { type: 'rename'; id: string; title: string }
   | { type: 'patch'; id: string; patch: Partial<WidgetDataMap[WidgetType]> }
@@ -24,23 +28,75 @@ export type Action =
   | { type: 'duplicate'; id: string }
   | { type: 'collapse'; id: string; collapsed: boolean }
   | { type: 'move'; id: string; workspace: string }
+  | { type: 'resize'; id: string; w: number; h: number }
+  | { type: 'pin'; id: string; pinned: boolean }
+  | { type: 'addWorkspace' }
+  | { type: 'updateWorkspace'; id: string; patch: Partial<Pick<Workspace, 'name' | 'icon' | 'color'>> }
+  | { type: 'moveWorkspace'; id: string; dir: -1 | 1 }
+  | { type: 'removeWorkspace'; id: string }
 
-function makeWidget(type: WidgetType): Widget {
-  return { id: uid(), type, title: WIDGETS[type].label, data: WIDGETS[type].createData() } as Widget
+function makeWidget(type: WidgetType, data?: Partial<WidgetDataMap[WidgetType]>, title?: string, catalogId?: string): Widget {
+  return {
+    id: uid(),
+    type,
+    title: title ?? WIDGETS[type].label,
+    data: { ...WIDGETS[type].createData(), ...data },
+    ...(catalogId ? { catalogId } : {})
+  } as Widget
 }
 
 const bottomOf = (layout: LayoutItem[]): number => layout.reduce((max, l) => Math.max(max, l.y + l.h), 0)
 
-/** Coloca widgets en columnas de 4 de ancho, rellenando por la columna más baja. */
-function autoLayout(widgets: Widget[]): LayoutItem[] {
-  const heights = [0, 0, 0]
-  return widgets.map((w) => {
-    const col = heights.indexOf(Math.min(...heights))
-    const { h } = WIDGETS[w.type].size
-    const item = { i: w.id, x: col * 4, y: heights[col], w: 4, h }
-    heights[col] += h
-    return item
-  })
+/** Primer hueco libre (de arriba abajo, de izquierda a derecha) donde cabe un widget de w×h. */
+function firstFit(layout: LayoutItem[], w: number, h: number): { x: number; y: number } {
+  const width = Math.min(w, GRID_COLS)
+  const overlaps = (x: number, y: number): boolean =>
+    layout.some((l) => x < l.x + l.w && x + width > l.x && y < l.y + l.h && y + h > l.y)
+  for (let y = 0; ; y++) {
+    for (let x = 0; x <= GRID_COLS - width; x++) if (!overlaps(x, y)) return { x, y }
+  }
+}
+
+/**
+ * Coloca los widgets sin huecos ni solapes: recorre en orden de lectura y pone
+ * cada uno en la primera posición libre (de arriba abajo, de izquierda a derecha).
+ * Los fijados se quedan donde están y los demás los rodean.
+ */
+export function arrange(ws: Workspace): LayoutItem[] {
+  const pinned = new Set(ws.widgets.filter((w) => w.pinned).map((w) => w.id))
+  const rows: boolean[][] = []
+  const occupied = (x: number, y: number): boolean => !!rows[y]?.[x]
+  const fill = (l: LayoutItem): void => {
+    for (let y = l.y; y < l.y + l.h; y++) {
+      rows[y] ??= []
+      for (let x = l.x; x < l.x + l.w; x++) rows[y][x] = true
+    }
+  }
+  const fits = (x: number, y: number, w: number, h: number): boolean => {
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (occupied(xx, yy)) return false
+    return true
+  }
+  const result = new Map<string, LayoutItem>()
+  for (const l of ws.layout) if (pinned.has(l.i)) {
+    fill(l)
+    result.set(l.i, l)
+  }
+  const free = ws.layout.filter((l) => !pinned.has(l.i)).sort((a, b) => a.y - b.y || a.x - b.x)
+  for (const l of free) {
+    const w = Math.min(l.w, GRID_COLS)
+    let placed: LayoutItem | null = null
+    for (let y = 0; !placed; y++) {
+      for (let x = 0; x <= GRID_COLS - w; x++) {
+        if (fits(x, y, w, l.h)) {
+          placed = { ...l, x, y, w }
+          break
+        }
+      }
+    }
+    fill(placed)
+    result.set(l.i, placed)
+  }
+  return ws.layout.map((l) => result.get(l.i) ?? l)
 }
 
 export function defaultSettings(): Settings {
@@ -50,80 +106,92 @@ export function defaultSettings(): Settings {
     locked: false,
     reduceTransparency: false,
     reduceMotion: false,
-    clock: { hour12, showSeconds: false },
+    clock: { hour12, showSeconds: false, date: 'long' },
     welcomeSeen: false,
-    defaultBrowser: 'system'
+    defaultBrowser: 'system',
+    favorites: []
   }
 }
 
+function placed(widgets: Widget[]): Workspace['layout'] {
+  return arrange({ id: '', name: '', icon: '', color: '', widgets, layout: widgets.map((w, i) => ({ i: w.id, x: 0, y: i * 100, ...sizeOf(w.type, 'm') })) })
+}
+
+const sizeOf = (type: WidgetType, size: SizeName): { w: number; h: number } => WIDGETS[type].sizes[size]
+
 export function defaultState(): AppState {
-  const content: Record<string, WidgetType[]> = {
-    trabajo: ['tasks', 'calendar', 'notes'],
-    personal: ['notes', 'tasks', 'music', 'calendar', 'links'],
-    estudio: ['notes', 'tasks', 'web']
+  // Un primer escritorio útil y compacto, sin superficies vacías enormes.
+  const content: Record<string, [WidgetType, Partial<WidgetDataMap[WidgetType]>?][]> = {
+    trabajo: [['tasks'], ['calendar', { view: 'agenda' }], ['pomodoro'], ['notes']],
+    personal: [['notes'], ['tasks'], ['music'], ['weather'], ['calendar'], ['links']],
+    estudio: [['pomodoro'], ['notes'], ['tasks'], ['timer']]
   }
   return {
-    version: 2,
-    workspaces: WORKSPACES.map(({ id, name }) => {
-      const widgets = content[id].map(makeWidget)
-      return { id, name, widgets, layout: autoLayout(widgets) }
+    version: 3,
+    workspaces: DEFAULT_WORKSPACES.map((w) => {
+      const widgets = content[w.id].map(([type, data]) => makeWidget(type, data))
+      return { ...w, widgets, layout: placed(widgets) }
     }),
     activeWorkspace: 'personal',
     settings: defaultSettings()
   }
 }
 
-function sanitizeWorkspace(ws: Partial<Workspace> & { id: string; name: string }): Workspace {
+function sanitizeWorkspace(ws: any, index: number): Workspace {
+  const fallback = DEFAULT_WORKSPACES.find((d) => d.id === ws.id) ?? DEFAULT_WORKSPACES[index % 3]
   const widgets = (Array.isArray(ws.widgets) ? ws.widgets : [])
-    .filter((w) => w && WIDGET_TYPES.includes(w.type))
+    .filter((w: any) => w && WIDGET_TYPES.includes(w.type))
     // Campos nuevos con su valor por defecto; los datos guardados mandan.
-    .map((w) => ({ ...w, data: { ...WIDGETS[w.type].createData(), ...w.data } }) as Widget)
-  const byId = new Map(widgets.map((w) => [w.id, w]))
-  const layout = (Array.isArray(ws.layout) ? ws.layout : [])
-    .filter((l) => l && byId.has(l.i))
-    .map(({ i, x, y, w, h }) => {
+    .map((w: any) => ({ ...w, data: { ...WIDGETS[w.type as WidgetType].createData(), ...w.data } }) as Widget)
+  const byId = new Map<string, Widget>(widgets.map((w: Widget) => [w.id, w]))
+  const layout: LayoutItem[] = (Array.isArray(ws.layout) ? ws.layout : [])
+    .filter((l: any) => l && byId.has(l.i))
+    .map(({ i, x, y, w, h }: LayoutItem) => {
       // Se respetan los mínimos actuales (pueden haber crecido desde que se guardó).
       const widget = byId.get(i)!
       const min = WIDGETS[widget.type].size
       const height = widget.collapsed ? COLLAPSED_H : Math.max(Number(h) || min.h, min.minH)
-      return { i, x: Number(x) || 0, y: Number(y) || 0, w: Math.max(Number(w) || min.w, min.minW), h: height }
+      return { i, x: Number(x) || 0, y: Number(y) || 0, w: Math.min(GRID_COLS, Math.max(Number(w) || min.w, min.minW)), h: height }
     })
   for (const w of widgets) {
-    if (!layout.some((l) => l.i === w.id)) {
-      const { w: width, h } = WIDGETS[w.type].size
-      layout.push({ i: w.id, x: 0, y: bottomOf(layout), w: width, h })
-    }
+    if (!layout.some((l) => l.i === w.id)) layout.push({ i: w.id, x: 0, y: bottomOf(layout), ...sizeOf(w.type, 'm') })
   }
-  return { id: ws.id, name: ws.name, widgets, layout }
+  return {
+    id: String(ws.id || uid()),
+    name: String(ws.name || fallback.name),
+    icon: String(ws.icon || fallback.icon),
+    color: String(ws.color || fallback.color),
+    widgets,
+    layout
+  }
 }
 
 function sanitize(raw: any): AppState {
   const defaults = defaultSettings()
-  const saved = Array.isArray(raw.workspaces) ? raw.workspaces : []
-  const workspaces = WORKSPACES.map(({ id, name }) => {
-    const found = saved.find((w: any) => w?.id === id)
-    return sanitizeWorkspace(found ? { ...found, id, name: found.name || name } : { id, name })
-  })
+  const saved = Array.isArray(raw.workspaces) && raw.workspaces.length ? raw.workspaces : DEFAULT_WORKSPACES
+  const workspaces = saved.map(sanitizeWorkspace)
   const settings: Settings = {
     ...defaults,
     ...raw.settings,
-    clock: { ...defaults.clock, ...raw.settings?.clock }
+    clock: { ...defaults.clock, ...raw.settings?.clock },
+    favorites: Array.isArray(raw.settings?.favorites) ? raw.settings.favorites : []
   }
-  const active = workspaces.some((w) => w.id === raw.activeWorkspace) ? raw.activeWorkspace : 'personal'
-  return { version: 2, workspaces, activeWorkspace: active, settings }
+  const active = workspaces.some((w: Workspace) => w.id === raw.activeWorkspace) ? raw.activeWorkspace : workspaces[0].id
+  return { version: 3, workspaces, activeWorkspace: active, settings }
 }
 
 /**
- * Convierte cualquier estado guardado (v1 o v2) al formato actual.
+ * Convierte cualquier estado guardado (v1, v2 o v3) al formato actual.
  * v1 tenía un solo panel: pasa entero al espacio «Personal».
+ * v2 tenía tres espacios fijos sin icono ni color: se les asignan los de siempre.
  */
 export function migrate(raw: unknown): AppState | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as any
-  if (r.version === 2) return sanitize(r)
+  if (r.version === 2 || r.version === 3) return sanitize(r)
   if (r.version === 1) {
     return sanitize({
-      workspaces: [{ id: 'personal', name: 'Personal', widgets: r.widgets, layout: r.layout }],
+      workspaces: DEFAULT_WORKSPACES.map((w) => (w.id === 'personal' ? { ...w, widgets: r.widgets, layout: r.layout } : { ...w, widgets: [], layout: [] })),
       activeWorkspace: 'personal',
       settings: { theme: r.settings?.theme, locked: !!r.settings?.locked }
     })
@@ -152,6 +220,12 @@ function updateWidget(state: AppState, id: string, fn: (w: Widget) => Widget): A
   }))
 }
 
+function updateLayoutItem(state: AppState, id: string, fn: (l: LayoutItem) => LayoutItem): AppState {
+  const found = findWidget(state, id)
+  if (!found) return state
+  return updateWorkspace(state, found.workspace.id, (ws) => ({ ...ws, layout: ws.layout.map((l) => (l.i === id ? fn(l) : l)) }))
+}
+
 function sameLayout(a: LayoutItem[], b: LayoutItem[]): boolean {
   if (a.length !== b.length) return false
   const byId = new Map(a.map((l) => [l.i, l]))
@@ -166,12 +240,12 @@ function reducer(state: AppState, action: Action): AppState {
     case 'hydrate':
       return action.state
     case 'add': {
-      const widget = makeWidget(action.widgetType)
-      const { w, h } = WIDGETS[action.widgetType].size
+      const widget = makeWidget(action.widgetType, action.data, action.title, action.catalogId)
+      const { w, h } = sizeOf(action.widgetType, action.size ?? 'm')
       return updateWorkspace(state, state.activeWorkspace, (ws) => ({
         ...ws,
         widgets: [...ws.widgets, widget],
-        layout: [...ws.layout, { i: widget.id, x: 0, y: bottomOf(ws.layout), w, h }]
+        layout: [...ws.layout, { i: widget.id, ...firstFit(ws.layout, w, h), w, h }]
       }))
     }
     case 'remove': {
@@ -200,11 +274,9 @@ function reducer(state: AppState, action: Action): AppState {
     case 'duplicate': {
       const found = findWidget(state, action.id)
       if (!found) return state
-      const copy = { ...structuredClone(found.widget), id: uid(), title: `${found.widget.title} (copia)` }
+      const copy = { ...structuredClone(found.widget), id: uid(), title: `${found.widget.title} (copia)`, pinned: false }
       const source = found.workspace.layout.find((l) => l.i === action.id)
-      const item = source
-        ? { ...source, i: copy.id, y: source.y + source.h }
-        : { i: copy.id, x: 0, y: bottomOf(found.workspace.layout), ...WIDGETS[copy.type].size }
+      const item = source ? { ...source, i: copy.id, y: source.y + source.h } : { i: copy.id, x: 0, y: bottomOf(found.workspace.layout), ...sizeOf(copy.type, 'm') }
       return updateWorkspace(state, found.workspace.id, (ws) => ({
         ...ws,
         widgets: [...ws.widgets, copy],
@@ -236,11 +308,56 @@ function reducer(state: AppState, action: Action): AppState {
         widgets: ws.widgets.filter((w) => w.id !== action.id),
         layout: ws.layout.filter((l) => l.i !== action.id)
       }))
+      const w = item?.w ?? 4
+      const h = item?.h ?? 8
       return updateWorkspace(removed, action.workspace, (ws) => ({
         ...ws,
-        widgets: [...ws.widgets, found.widget],
-        layout: [...ws.layout, { i: action.id, x: 0, y: bottomOf(ws.layout), w: item?.w ?? 4, h: item?.h ?? 8 }]
+        widgets: [...ws.widgets, { ...found.widget, pinned: false }],
+        layout: [...ws.layout, { i: action.id, ...firstFit(ws.layout, w, h), w, h }]
       }))
+    }
+    case 'resize': {
+      const found = findWidget(state, action.id)
+      if (!found) return state
+      const min = WIDGETS[found.widget.type].size
+      const collapsedOff = updateWidget(state, action.id, (w) => ({ ...w, collapsed: false, restoreH: undefined }))
+      return updateLayoutItem(collapsedOff, action.id, (l) => ({
+        ...l,
+        w: Math.min(GRID_COLS, Math.max(min.minW, action.w)),
+        h: Math.max(min.minH, action.h),
+        x: Math.min(l.x, GRID_COLS - Math.min(GRID_COLS, Math.max(min.minW, action.w)))
+      }))
+    }
+    case 'pin':
+      return updateWidget(state, action.id, (w) => ({ ...w, pinned: action.pinned }))
+    case 'addWorkspace': {
+      const used = new Set(state.workspaces.map((w) => w.color))
+      const ws: Workspace = {
+        id: uid(),
+        name: `Espacio ${state.workspaces.length + 1}`,
+        icon: 'grid',
+        color: WORKSPACE_COLORS.find((c) => !used.has(c)) ?? WORKSPACE_COLORS[0],
+        widgets: [],
+        layout: []
+      }
+      return { ...state, workspaces: [...state.workspaces, ws], activeWorkspace: ws.id }
+    }
+    case 'updateWorkspace':
+      return updateWorkspace(state, action.id, (ws) => ({ ...ws, ...action.patch, name: (action.patch.name ?? ws.name).trim() || ws.name }))
+    case 'moveWorkspace': {
+      const list = [...state.workspaces]
+      const i = list.findIndex((w) => w.id === action.id)
+      const j = i + action.dir
+      if (i < 0 || j < 0 || j >= list.length) return state
+      ;[list[i], list[j]] = [list[j], list[i]]
+      return { ...state, workspaces: list }
+    }
+    case 'removeWorkspace': {
+      if (state.workspaces.length <= 1) return state
+      const i = state.workspaces.findIndex((w) => w.id === action.id)
+      const workspaces = state.workspaces.filter((w) => w.id !== action.id)
+      const active = state.activeWorkspace === action.id ? workspaces[Math.max(0, i - 1)].id : state.activeWorkspace
+      return { ...state, workspaces, activeWorkspace: active }
     }
   }
 }

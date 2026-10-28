@@ -2,7 +2,10 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { join } from 'node:path'
 import { APP_ID, IPC, type AppState } from '../shared/types'
 import { registerBrowsers } from './browsers'
+import { registerFiles } from './files'
 import { registerGoogle } from './google'
+import { registerInfo } from './info'
+import { registerSystem } from './system'
 import { handleMediaProtocol, pickAudioFiles, pickAudioFolder, registerMediaScheme } from './media'
 import { registerNotion } from './notion'
 import { registerNowPlaying } from './nowPlaying'
@@ -134,6 +137,9 @@ registerGoogle()
 registerNotion()
 registerBrowsers(() => mainWindow)
 registerData(() => mainWindow)
+registerFiles(() => mainWindow)
+registerInfo()
+registerSystem()
 
 app.on('second-instance', () => {
   if (!mainWindow) return

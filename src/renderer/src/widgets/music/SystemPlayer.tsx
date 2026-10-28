@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { APP_ID, type MediaRepeat, type MediaSession, type NowPlayingState, type RepeatMode } from '../../../../shared/types'
+import { useActive, useInterval } from '../../context'
 import { Icon } from '../../icons'
 import { EmptyState } from '../../ui/controls'
 import { appName, splitArtist } from '../../util'
@@ -28,11 +29,9 @@ function useNowPlaying(): { state: NowPlayingState | null; thumbs: Record<string
 function useLivePosition(session: MediaSession | undefined): number {
   const playing = session?.status === 'Playing'
   const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!playing) return
-    const timer = setInterval(() => setNow(Date.now()), 500)
-    return () => clearInterval(timer)
-  }, [playing])
+  // Solo se repinta el progreso mientras se ve (el audio de la otra app sigue igual).
+  const active = useActive()
+  useInterval(() => setNow(Date.now()), 500, playing && active)
   if (!session) return 0
   if (!playing) return session.position
   const position = session.position + Math.max(0, (now - session.updatedAt) / 1000)
@@ -127,6 +126,7 @@ export function SystemPlayer({ widget, update }: WidgetProps<'music'>): JSX.Elem
       )}
 
       <PlayerUI
+        hideUnavailable
         artwork={session.thumbKey ? thumbs[session.thumbKey] : null}
         badge={
           <span className="app-badge">
