@@ -2866,6 +2866,13 @@ input.switch:checked {
   gap: 8px;
   height: 100%;
   min-height: 0;
+  overflow-y: auto;
+}
+
+/* Sin resultados o con error, la explicación no se recorta: desplaza el conjunto, no solo la lista. */
+.notion-setup > .list:has(> .empty-inline) {
+  flex: none;
+  overflow: visible;
 }
 
 .tasks > .tasks-local,
@@ -5249,4 +5256,72 @@ input.switch:checked {
 /* Modo bloqueado: sin asas ni cursor de mover; la cabecera se ve en reposo. */
 .is-locked .widget-header {
   cursor: default;
+}
+
+/* Resultado de «Comprobar conexión» de Notion */
+.check-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+
+.ok-line,
+.warn-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.ok-line > svg,
+.warn-line > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.ok-line > svg {
+  color: var(--success);
+}
+
+.warn-line > svg {
+  color: var(--danger);
+}
+
+.source-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12.5px;
+}
+
+.source-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.list-label {
+  margin: 6px 2px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Casillas de una página de Notion: la etiqueta entera marca la casilla */
+.todo-item {
+  list-style: none;
+}
+
+.todo-item > label.task {
+  cursor: pointer;
 }

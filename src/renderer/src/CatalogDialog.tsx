@@ -45,7 +45,11 @@ export function CatalogDialog({ onClose, onAdded }: { onClose(): void; onAdded(e
     onAdded(entry)
     // Solo las integraciones nativas se conectan en Ajustes; en un panel web se inicia sesión dentro del panel.
     if (entry.account && entry.mode === 'nativo') {
-      toast(`${entry.title} necesita conectar tu cuenta.`, 'info', { label: 'Conectar', run: () => openSettings('conexiones') })
+      // Solo se avisa si de verdad falta la cuenta.
+      const status = entry.id === 'notion-tasks' ? window.nido.notion.status() : entry.id === 'google-calendar' ? window.nido.google.status() : null
+      void status?.then((r) => {
+        if (r.ok && !r.data.connected) toast(`${entry.title} necesita conectar tu cuenta.`, 'info', { label: 'Conectar', run: () => openSettings('conexiones') })
+      })
     } else if (entry.account && entry.mode === 'web') {
       toast(`Inicia sesión en ${entry.title} dentro del panel. Si no lo permite, usa ↗ para abrirlo en tu navegador.`, 'info')
     }

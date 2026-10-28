@@ -20,6 +20,7 @@ import {
   toTask,
   type NotionTask
 } from './notionModel'
+import { NotionChecklist } from './NotionChecklist'
 import { NotionSetup } from './NotionSetup'
 
 const REFRESH_MS = 60_000
@@ -61,23 +62,43 @@ export function NotionTasks({ widget, update }: WidgetProps<'tasks'>): JSX.Eleme
           </button>
         }
       >
-        Conecta tu cuenta de Notion para usar una base de datos como lista de tareas.
+        Conecta tu cuenta de Notion para usar una base de datos, o las casillas de una página, como lista de tareas.
       </EmptyState>
     )
   }
 
-  if (!config || editingConfig) {
+  const pageConfig = widget.data.notionPage
+  if ((!config && !pageConfig) || editingConfig) {
     return (
       <NotionSetup
         current={config}
         onSave={(c) => {
-          update({ notion: c })
+          update({ notion: c, notionPage: undefined })
           setEditingConfig(false)
         }}
-        onCancel={config ? () => setEditingConfig(false) : undefined}
+        onSavePage={(c) => {
+          update({ notionPage: c })
+          setEditingConfig(false)
+        }}
+        onCancel={config || pageConfig ? () => setEditingConfig(false) : undefined}
       />
     )
   }
+
+  if (pageConfig) {
+    return (
+      <NotionChecklist
+        key={pageConfig.pageId}
+        widgetId={widget.id}
+        config={pageConfig}
+        filters={filters}
+        onFilters={(f) => update({ filters: f })}
+        onConfigure={() => setEditingConfig(true)}
+        onAuthError={loadStatus}
+      />
+    )
+  }
+  if (!config) return <EmptyState icon={<Spinner />} title="Comprobando Notion…" />
 
   return (
     <NotionList
@@ -200,8 +221,8 @@ function NotionList({
       if (r.code === 'auth') onAuthError()
       return
     }
-    const { sources, readable, pages, workspace } = r.data
-    if (readable === false) toast(`Nido ve ${sources} base${sources === 1 ? '' : 's'} de datos en «${workspace ?? 'Notion'}», pero no «${config.name}». Compártela con la conexión de Nido.`, 'error')
+    const { sources, readable, rows: pages, problem } = r.data
+    if (readable === false) toast(`No se puede leer «${config.name}». ${problem ?? ''}`, 'error')
     else toast(`Acceso correcto a «${config.name}»: ${pages ?? 0} tarea${pages === 1 ? '' : 's'}. ${sources} base${sources === 1 ? '' : 's'} de datos visibles.`, 'success')
   }
 
@@ -262,7 +283,7 @@ function NotionList({
     return (
       <EmptyState
         icon={<BrandLogo brand="notion" name="Notion" size={28} decorative />}
-        title={loadError.code === 'network' ? 'Sin conexión con Notion' : loadError.code === 'notfound' ? 'Nido no ve esta base de datos' : 'No se pudieron cargar las tareas'}
+        title={loadError.code === 'network' ? 'Sin conexión con Notion' : loadError.code === 'notfound' ? 'Nido no ve esta base de datos' : loadError.code === 'forbidden' ? 'Sin permiso en Notion' : loadError.code === 'auth' ? 'Notion rechazó el acceso' : 'No se pudieron cargar las tareas'}
         action={
           <div className="row center wrap">
             <button className="btn small primary" onClick={() => void load()}>

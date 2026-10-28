@@ -1,6 +1,9 @@
 import {
   IPC,
   type NotionAccess,
+  type NotionLinkCheck,
+  type NotionPageTodos,
+  type NotionTodo,
   type NotionPage,
   type NotionProperty,
   type NotionSchema,
@@ -29,6 +32,9 @@ const MAX_PAGES = 1000
 const AUTH_URL = serviceUrl('NIDO_NOTION_AUTH_URL', 'https://api.notion.com/v1/oauth/authorize')
 const AUTH_TIMEOUT_MS = 5 * 60_000
 
+// Sin nido.oauth.json no hay inicio de sesión oficial; la interfaz no lo ofrece, pero si llega aquí se explica.
+const NO_OAUTH = 'Esta copia de Nido no tiene preparado el inicio de sesión oficial de Notion (falta la integración pública del desarrollador). Conecta con un token de integración interna.'
+
 let pendingConnect: Promise<NotionStatus> | null = null
 let cancelPending: (() => void) | null = null
 let refreshing: Promise<string | null> | null = null
@@ -47,12 +53,41 @@ async function status(): Promise<NotionStatus> {
   }
 }
 
+/** Cómo se llama la conexión en Notion, para que las instrucciones digan qué buscar. */
+function connectionName(): string {
+  const config = getConfig().notion
+  return config?.method === 'internal' && config.bot ? `la integración «${config.bot}»` : 'Nido'
+}
+
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
+
+/** Pasos para compartir una base de datos con la conexión (dependen de cómo se conectó). */
+export function shareHint(what: 'base de datos' | 'página' = 'base de datos'): string {
+  const config = getConfig().notion
+  const name = config?.method === 'internal' ? (config.bot ? `«${config.bot}»` : 'tu integración') : 'Nido'
+  return `En Notion, abre la ${what} → ••• → Conexiones → Añadir conexiones y elige ${name}.`
+}
+
 function apiError(status: number, json: any): NidoError {
   const message = json?.message as string | undefined
-  if (status === 401) return new NidoError('auth', 'Notion no acepta el token. Revísalo o crea uno nuevo en tu integración.')
-  if (status === 403) return new NidoError('forbidden', 'La integración no tiene permiso para esto en Notion.')
+  const internal = getConfig().notion?.method === 'internal'
+  if (status === 401) {
+    return new NidoError(
+      'auth',
+      internal ? 'Notion no acepta el token: se borró la integración o se regeneró su token. Pega el token actual.' : 'Notion ya no acepta la autorización de Nido. Vuelve a conectar.'
+    )
+  }
+  if (status === 403) {
+    // restricted_resource: la integración existe pero no tiene esa capacidad (leer, insertar, actualizar).
+    return new NidoError(
+      'forbidden',
+      internal
+        ? `${capitalize(connectionName())} no tiene permiso para esto. En Notion → Integraciones → ${getConfig().notion?.bot ?? 'tu integración'} → Capacidades, activa leer, actualizar e insertar contenido.`
+        : 'Nido no tiene permiso para esto en Notion. Vuelve a conectar y autoriza el acceso.'
+    )
+  }
   if (status === 404) {
-    return new NidoError('notfound', 'Notion no encuentra la base de datos. ¿Está compartida con la integración (Conexiones)?')
+    return new NidoError('notfound', `Notion no encuentra ese contenido o ${connectionName()} no tiene acceso. ${shareHint()}`)
   }
   if (status === 429) return new NidoError('rate', 'Notion limita las peticiones ahora mismo. Reintenta en unos segundos.')
   if (status >= 500) return new NidoError('network', 'Notion no responde. Reintenta en unos minutos.')
@@ -133,7 +168,7 @@ const base64url = (buf: Buffer): string => buf.toString('base64url')
 
 async function broker<T>(path: string, body: Record<string, string>): Promise<T> {
   const app = oauthApps().notion
-  if (!app) throw new NidoError('config', 'Esta copia de Nido no tiene configurada la autorización de Notion.')
+  if (!app) throw new NidoError('config', NO_OAUTH)
   let res: Response
   try {
     res = await fetch(`${app.brokerUrl}${path}`, {
@@ -170,7 +205,7 @@ async function saveTokens(tokens: NotionTokens): Promise<void> {
 async function connect(): Promise<NotionStatus> {
   pendingConnect ??= (async () => {
     const app = oauthApps().notion
-    if (!app) throw new NidoError('config', 'Esta copia de Nido no tiene configurada la autorización de Notion. Usa un token de integración interna en Opciones avanzadas.')
+    if (!app) throw new NidoError('config', NO_OAUTH)
     if (!(await encryptionAvailable())) throw new NidoError('config', 'El cifrado del sistema no está disponible; Nido no guardará credenciales sin cifrar.')
     // El intercambiador devuelve el navegador a este puerto local. Solo canjea el código si se le
     // presenta el verificador cuyo hash va en el state (como PKCE): quien intercepte el código no basta.
@@ -282,20 +317,219 @@ async function search(query: string): Promise<NotionSource[]> {
 /** «Comprobar acceso»: token válido, bases visibles y lectura real de la elegida (sin caché). */
 async function check(dataSourceId?: string): Promise<NotionAccess> {
   const me = await call<any>('/users/me')
-  const sources = await search('')
-  const access: NotionAccess = { workspace: me?.bot?.workspace_name ?? getConfig().notion?.workspace, sources: sources.length }
+  const [sources, pages] = await Promise.all([search(''), searchPages('')])
+  const config = getConfig().notion
+  const access: NotionAccess = {
+    workspace: me?.bot?.workspace_name ?? config?.workspace,
+    bot: me?.name ?? config?.bot,
+    method: config?.method,
+    sources: sources.length,
+    list: sources.slice(0, 50),
+    pages: pages.slice(0, 50)
+  }
   if (dataSourceId) {
     try {
       await schema(dataSourceId)
       access.readable = true
-      access.pages = (await query(dataSourceId)).length
+      access.rows = (await query(dataSourceId)).length
       queryCache.delete(dataSourceId)
     } catch (err) {
-      if (err instanceof NidoError && (err.code === 'notfound' || err.code === 'forbidden')) access.readable = false
-      else throw err
+      if (err instanceof NidoError && (err.code === 'notfound' || err.code === 'forbidden')) {
+        access.readable = false
+        access.problem = err.message
+      } else throw err
     }
   }
   return access
+}
+
+/**
+ * Saca el ID de un enlace de Notion o lo acepta tal cual. En los enlaces de bases de datos el ID
+ * va al final de la ruta (…/Tareas-<32 hex>); el ?v= es el de la vista y no sirve.
+ */
+export function parseNotionId(link: string): string | null {
+  const raw = link.trim()
+  const asId = (hex: string): string => `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  const plain = raw.replace(/-/g, '')
+  if (/^[0-9a-f]{32}$/i.test(plain)) return asId(plain.toLowerCase())
+  let path = raw
+  try {
+    const url = new URL(raw)
+    if (!/(^|\.)notion\.(so|site|com)$/.test(url.hostname)) return null
+    path = url.pathname
+    const peek = url.searchParams.get('p')?.replace(/-/g, '')
+    if (peek && /^[0-9a-f]{32}$/i.test(peek)) return asId(peek.toLowerCase())
+  } catch {
+    return null
+  }
+  const matches = path.replace(/-/g, '').match(/[0-9a-f]{32}/gi)
+  return matches ? asId(matches[matches.length - 1].toLowerCase()) : null
+}
+
+/** «Comprobar enlace»: acepta el de una base de datos (o el ID de una fuente de datos) y comprueba que se lee. */
+async function resolve(link: string): Promise<NotionLinkCheck> {
+  const id = parseNotionId(link)
+  if (!id) throw new NidoError('invalid', 'Eso no parece un enlace de Notion. En Notion, abre la base de datos como página completa → ••• → Copiar enlace.')
+  // Errores que significan «no es de este tipo o no hay acceso»: se prueba el siguiente tipo.
+  const tryGet = async (path: string): Promise<any | null> => {
+    try {
+      return await call<any>(path)
+    } catch (err) {
+      if (err instanceof NidoError && (err.code === 'notfound' || err.code === 'invalid')) return null
+      throw err
+    }
+  }
+  const count = async (source: NotionSource): Promise<NotionSource & { pages: number }> => {
+    const pages = await query(source.id)
+    queryCache.delete(source.id)
+    return { ...source, pages: pages.length }
+  }
+  const ds = await tryGet(`/data_sources/${id}`)
+  if (ds?.object === 'data_source') {
+    const source = { id: ds.id, title: plainText(ds.title) || 'Sin título' }
+    return { kind: 'database', title: source.title, sources: [await count(source)] }
+  }
+  const db = await tryGet(`/databases/${id}`)
+  if (db?.object === 'database') {
+    const list: NotionSource[] = (db.data_sources ?? []).map((s: any) => ({ id: s.id, title: s.name || plainText(db.title) || 'Sin título' }))
+    if (!list.length) throw new NidoError('notfound', `Esa base de datos no tiene fuentes de datos que ${connectionName()} pueda leer.`)
+    return { kind: 'database', title: plainText(db.title) || list[0].title, sources: await Promise.all(list.map(count)) }
+  }
+  const page = await tryGet(`/pages/${id}`)
+  if (page?.object === 'page') {
+    // Una página normal: sus casillas (y las bases de datos que tenga dentro).
+    const todos = await pageTodos(page.id, page)
+    return { kind: 'page', title: todos.title, sources: [], page: todos }
+  }
+  throw new NidoError('notfound', `${capitalize(connectionName())} no tiene acceso a ese enlace, o no existe. ${shareHint('página')}`)
+}
+
+// ---------- Casillas de páginas normales (bloques to_do) ----------
+
+/** Título de una página: la propiedad de tipo title (su nombre cambia: «title», «Nombre»…). */
+function pageTitle(page: any): string {
+  const prop = Object.values<any>(page?.properties ?? {}).find((p) => p?.type === 'title')
+  return plainText(prop?.title) || 'Sin título'
+}
+
+/** Páginas normales compartidas con la conexión. Las filas de una base de datos también son páginas: se excluyen. */
+async function searchPages(text: string): Promise<NotionSource[]> {
+  const out: NotionSource[] = []
+  let cursor: string | undefined
+  do {
+    const json = await call<any>('/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: text.trim() || undefined,
+        filter: { property: 'object', value: 'page' },
+        sort: { timestamp: 'last_edited_time', direction: 'descending' },
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {})
+      })
+    })
+    for (const r of json.results ?? []) {
+      const parent = r.parent?.type
+      if (r.object !== 'page' || r.in_trash || parent === 'database_id' || parent === 'data_source_id') continue
+      out.push({ id: r.id, title: pageTitle(r) })
+    }
+    cursor = json.has_more ? json.next_cursor : undefined
+  } while (cursor && out.length < 200)
+  return out
+}
+
+const MAX_BLOCKS = 3000
+const MAX_DEPTH = 8
+const HEADINGS = new Set(['heading_1', 'heading_2', 'heading_3'])
+
+/** Hijos directos de un bloque (o página), paginando de 100 en 100. */
+async function blockChildren(blockId: string): Promise<any[]> {
+  const out: any[] = []
+  let cursor: string | undefined
+  do {
+    const params = new URLSearchParams({ page_size: '100', ...(cursor ? { start_cursor: cursor } : {}) })
+    const json = await call<any>(`/blocks/${encodeURIComponent(blockId)}/children?${params}`)
+    out.push(...(json.results ?? []))
+    cursor = json.has_more ? json.next_cursor : undefined
+  } while (cursor)
+  return out
+}
+
+const toTodo = (block: any, depth: number, section?: string): NotionTodo => ({
+  id: block.id,
+  text: plainText(block.to_do?.rich_text),
+  checked: !!block.to_do?.checked,
+  depth,
+  ...(section ? { section } : {})
+})
+
+/**
+ * Casillas de una página, en orden. La API solo da un nivel de hijos por petición: se recorren los
+ * bloques con hijos (casillas con subtareas, desplegables, columnas, callouts, bloques sincronizados…).
+ * No se entra en subpáginas ni en bases de datos, que son contenido aparte.
+ */
+async function pageTodos(pageId: string, known?: any): Promise<NotionPageTodos> {
+  let page = known
+  if (!page) {
+    try {
+      page = await call<any>(`/pages/${encodeURIComponent(pageId)}`)
+    } catch (err) {
+      if (err instanceof NidoError && err.code === 'notfound') {
+        throw new NidoError('notfound', `${capitalize(connectionName())} no tiene acceso a esta página, o se ha borrado. ${shareHint('página')}`)
+      }
+      throw err
+    }
+  }
+  const todos: NotionTodo[] = []
+  const databases: NotionSource[] = []
+  let seen = 0
+  let truncated = false
+  let section: string | undefined
+  const walk = async (blockId: string, depth: number, level: number): Promise<void> => {
+    for (const block of await blockChildren(blockId)) {
+      if (++seen > MAX_BLOCKS) {
+        truncated = true
+        return
+      }
+      if (!block.type || block.in_trash) continue // objeto parcial o en la papelera
+      if (HEADINGS.has(block.type)) section = plainText(block[block.type]?.rich_text) || undefined
+      if (block.type === 'to_do') todos.push(toTodo(block, depth, section))
+      if (block.type === 'child_database') databases.push({ id: block.id, title: block.child_database?.title || 'Base de datos sin título' })
+      if (block.type === 'child_page' || block.type === 'child_database') continue
+      // Copia de un bloque sincronizado: el contenido vive en el original, que puede estar en una
+      // página no compartida; entonces se omite sin que falle el resto.
+      const synced = block.type === 'synced_block' ? block.synced_block?.synced_from?.block_id : undefined
+      if (synced) {
+        if (level >= MAX_DEPTH) truncated = true
+        else
+          await walk(synced, depth, level + 1).catch((err) => {
+            if (!(err instanceof NidoError && (err.code === 'notfound' || err.code === 'forbidden'))) throw err
+          })
+      } else if (block.has_children) {
+        if (level >= MAX_DEPTH) truncated = true
+        else await walk(block.id, depth + (block.type === 'to_do' ? 1 : 0), level + 1)
+      }
+    }
+  }
+  await walk(page.id, 0, 0)
+  return { id: page.id, title: pageTitle(page), url: page.url, todos, databases, truncated }
+}
+
+/** Marca o desmarca una casilla. Solo se envía `checked`: Notion conserva el texto, el color y los hijos. */
+async function setTodo(blockId: string, checked: boolean, before?: boolean): Promise<NotionTodo> {
+  const path = `/blocks/${encodeURIComponent(blockId)}`
+  let current: any
+  try {
+    current = await call<any>(path)
+  } catch (err) {
+    if (err instanceof NidoError && err.code === 'notfound') throw new NidoError('notfound', 'Esa casilla ya no existe en Notion (se borró o se movió a otra página).')
+    throw err
+  }
+  if (current.type !== 'to_do') throw new NidoError('invalid', 'Ese bloque ya no es una casilla en Notion.')
+  if (before !== undefined && !!current.to_do?.checked !== before) {
+    throw new NidoError('conflict', 'Esta casilla ha cambiado en Notion mientras tanto. Se ha recargado: revisa y vuelve a marcarla.')
+  }
+  const updated = await call<any>(path, { method: 'PATCH', body: JSON.stringify({ to_do: { checked } }) })
+  return toTodo(updated, 0)
 }
 
 async function schema(dataSourceId: string): Promise<NotionSchema> {
@@ -446,4 +680,10 @@ export function registerNotion(): void {
     })
   )
   handleResult(IPC.notion.check, (id?: string) => check(id ? String(id) : undefined))
+  handleResult(IPC.notion.resolve, (link: string) => resolve(String(link ?? '')))
+  handleResult(IPC.notion.searchPages, (q: string) => searchPages(String(q ?? '')))
+  handleResult(IPC.notion.todos, (pageId: string) => pageTodos(String(pageId)))
+  handleResult(IPC.notion.setTodo, (blockId: string, checked: boolean, before?: boolean) =>
+    setTodo(String(blockId), !!checked, typeof before === 'boolean' ? before : undefined)
+  )
 }

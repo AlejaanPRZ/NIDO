@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionStatus, Theme } from '../../shared/types'
+import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionAccess, NotionLinkCheck, NotionStatus, Theme } from '../../shared/types'
 import { BrandLogo, brandOfBrowser, hasBrand } from './BrandLogo'
 import { CATALOG } from './catalog'
 import { useApp, type SettingsSection } from './context'
@@ -582,11 +582,7 @@ function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
   const [advanced, setAdvanced] = useState(false)
 
   useEffect(() => {
-    window.nido.notion.status().then((r) => {
-      if (!r.ok) return
-      setStatus(r.data)
-      if (!r.data.oauth && !r.data.connected) setAdvanced(true)
-    })
+    window.nido.notion.status().then((r) => r.ok && setStatus(r.data))
   }, [])
 
   const apply = (r: Awaited<ReturnType<typeof window.nido.notion.status>>, message: string): void => {
@@ -601,7 +597,6 @@ function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
       toast(r.error)
     } else {
       setError({ message: r.error, code: r.code })
-      if (r.code === 'config') setAdvanced(true)
     }
   }
 
@@ -614,6 +609,7 @@ function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
 
   const saveToken = async (): Promise<void> => {
     setBusy('token')
+    setError(null)
     apply(await window.nido.notion.setToken(token), 'Notion conectado')
     setBusy(null)
   }
@@ -639,36 +635,65 @@ function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
   if (!status) return <Spinner />
   const state: ConnState = busy ? 'connecting' : status.connected ? 'connected' : status.expired ? 'expired' : error ? 'error' : 'disconnected'
 
+  // El formulario del token: principal si esta copia no trae inicio de sesión oficial; avanzado si lo trae.
+  const tokenForm = (
+    <ol className="stepper compact">
+      <Step n={1} title="Crea una integración interna">
+        <p className="step-text">
+          En <button className="link-btn" onClick={open('https://www.notion.so/profile/integrations')}>tus integraciones de Notion</button> → Nueva integración → tipo <b>Interna</b>, en el espacio de trabajo de tus
+          tareas. En Capacidades, deja activado leer, actualizar e insertar contenido.
+        </p>
+      </Step>
+      <Step n={2} title="Pega su token">
+        <p className="step-text">En la integración → Configuración → Token de integración interna (empieza por «ntn_»).</p>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void saveToken()
+          }}
+        >
+          <input className="input mono grow" type="password" autoComplete="off" aria-label="Token de integración" value={token} placeholder="ntn_…" onChange={(e) => setToken(e.target.value)} />
+          <button className="btn small primary" type="submit" disabled={!token.trim() || busy !== null}>
+            {busy === 'token' ? 'Comprobando…' : 'Conectar'}
+          </button>
+        </form>
+        <p className="muted small-text">Nido lo comprueba con Notion antes de guardarlo y lo guarda cifrado con Windows.</p>
+      </Step>
+      <Step n={3} title="Comparte solo lo que Nido necesita">
+        <p className="step-text">
+          En Notion, abre la base de datos o la página con tus casillas → <b>•••</b> → <b>Conexiones</b> → <b>Añadir conexiones</b> → tu integración. Sin este paso, Nido no ve nada. Compartir con una
+          integración no hace pública la página ni la enseña a otras personas.
+        </p>
+      </Step>
+    </ol>
+  )
+
   return (
     <div className="conn-detail">
       <DetailHeader title="Notion" logo={<BrandLogo brand="notion" name="Notion" size={40} decorative />} state={state} account={status.workspace} onBack={onBack} />
-      {status.expired && !status.connected && !busy && (
-        <ErrorBox message="Notion ya no acepta el acceso guardado (se retiró o se borró la integración). Vuelve a conectar." code="auth" onAction={() => void (status.oauth ? connect() : setAdvanced(true))} />
+      {status.expired && !status.connected && !busy && !error && (
+        <ErrorBox
+          message={
+            status.oauth
+              ? 'Notion ya no acepta el acceso guardado (se retiró o se borró la conexión). Vuelve a conectar.'
+              : 'Notion ya no acepta el token guardado (se borró la integración o se regeneró su token). Pega el token actual.'
+          }
+          code={status.oauth ? 'auth' : undefined}
+          onAction={() => void connect()}
+        />
       )}
-      {error && <ErrorBox message={error.message} code={error.code} onAction={(c) => (c === 'config' ? setAdvanced(true) : void connect())} />}
+      {error && (
+        <ErrorBox
+          message={error.message}
+          // Sin inicio de sesión oficial, «Volver a conectar» no tendría adónde ir: el formulario del token ya está a la vista.
+          code={error.code === 'auth' && !status.oauth ? undefined : error.code}
+          onAction={(c) => (c === 'config' ? setAdvanced(true) : void connect())}
+        />
+      )}
 
       {status.connected ? (
-        <div className="settings-card">
-          <p>
-            Conectado al espacio <b>{status.workspace ?? 'de Notion'}</b>
-            {status.method === 'internal' ? ` con la integración interna${status.bot ? ` «${status.bot}»` : ''}` : ''}.
-          </p>
-          <p className="muted small-text">
-            Elige la base de datos de tareas y asocia sus propiedades desde un widget de Tareas (origen Notion).
-            {status.method === 'oauth' ? ' Para dar acceso a más páginas, pulsa «Elegir páginas».' : ''}
-          </p>
-          <div className="row">
-            {status.method === 'oauth' && (
-              <button className="btn small" disabled={busy !== null} onClick={() => void connect()}>
-                <Icon name="edit" size={13} /> Elegir páginas
-              </button>
-            )}
-            <span className="grow" />
-            <button className="btn small danger-ghost" onClick={() => void disconnect()}>
-              Desconectar
-            </button>
-          </div>
-        </div>
+        <NotionConnected status={status} busy={busy !== null} onPick={status.method === 'oauth' && status.oauth ? () => void connect() : undefined} onDisconnect={() => void disconnect()} />
       ) : busy === 'connect' ? (
         <WaitingBrowser service="Notion" onCancel={() => void window.nido.notion.cancel()} />
       ) : status.oauth ? (
@@ -682,53 +707,184 @@ function NotionDetail({ onBack }: { onBack(): void }): JSX.Element {
       ) : (
         <div className="settings-card">
           <p>
-            <b>Esta copia de Nido no trae la autorización de Notion preparada.</b> Necesita una integración pública y un pequeño servicio que guarde su secreto (ver CONEXIONES.md). Mientras, puedes conectar con un token de integración interna en las opciones avanzadas.
+            <b>Conecta con un token de integración interna.</b> Es la forma de Notion para uso personal, y solo da acceso a las páginas y bases de datos que compartas con la integración.
           </p>
+          {tokenForm}
         </div>
       )}
 
-      <details className="advanced" open={advanced} onToggle={(e) => setAdvanced((e.target as HTMLDetailsElement).open)}>
-        <summary>Opciones avanzadas</summary>
-        <div className="form">
-          <p className="step-text">
-            <b>Token de integración interna.</b> Alternativa sin servicio intermedio, pensada para uso personal.
-          </p>
-          <ol className="stepper compact">
-            <Step n={1} title="Crea una integración interna">
-              <p className="step-text">
-                En <button className="link-btn" onClick={open('https://www.notion.so/profile/integrations')}>tus integraciones de Notion</button> → Nueva integración → tipo <b>Interna</b>, con permiso para leer, actualizar e insertar contenido.
-              </p>
-            </Step>
-            <Step n={2} title="Pega su token">
-              <form
-                className="row"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void saveToken()
-                }}
-              >
-                <input className="input mono grow" type="password" autoComplete="off" aria-label="Token de integración" value={token} placeholder="ntn_…" onChange={(e) => setToken(e.target.value)} />
-                <button className="btn small" type="submit" disabled={!token.trim() || busy !== null}>
-                  {busy === 'token' ? 'Comprobando…' : 'Conectar con token'}
-                </button>
-              </form>
-            </Step>
-            <Step n={3} title="Comparte la base de datos con la integración">
-              <p className="step-text">
-                En Notion: base de datos → <b>•••</b> → <b>Conexiones</b> → añade tu integración.
-              </p>
-            </Step>
-          </ol>
-          <div className="tech">
-            <p>
-              <b>Método:</b> autorización oficial de Notion (OAuth de integración pública) en el navegador del sistema. El código se canjea en un servicio aparte que guarda el secreto de Notion; Nido solo guarda el token, cifrado con Windows.
+      {status.oauth && !status.connected && busy !== 'connect' && (
+        <details className="advanced" open={advanced} onToggle={(e) => setAdvanced((e.target as HTMLDetailsElement).open)}>
+          <summary>Opciones avanzadas</summary>
+          <div className="form">
+            <p className="step-text">
+              <b>Token de integración interna.</b> Alternativa al inicio de sesión, pensada para uso personal.
             </p>
-            <p>
-              <b>Acceso:</b> solo a las páginas y bases de datos que elijas al autorizar. API 2026-03-11.
-            </p>
+            {tokenForm}
           </div>
+        </details>
+      )}
+
+      <div className="tech">
+        {status.method === 'oauth' || (status.oauth && !status.connected) ? (
+          <p>
+            <b>Método:</b> autorización oficial de Notion (OAuth de integración pública) en el navegador del sistema. El código se canjea en un servicio aparte que guarda el secreto de Notion; Nido solo guarda el
+            token, cifrado con Windows.
+          </p>
+        ) : (
+          <p>
+            <b>Método:</b> token de una integración interna, validado con Notion y guardado cifrado con Windows (DPAPI). «Conectar con Notion» (inicio de sesión en el navegador) aparece cuando esta copia de Nido
+            trae configurada la integración pública del desarrollador.
+          </p>
+        )}
+        <p>
+          <b>Acceso:</b> solo a las páginas y bases de datos compartidas con la conexión. API de Notion 2026-03-11.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+const timeOf = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+
+/** Conectado: espacio, «Comprobar conexión» (petición real) y comprobar el enlace de una base de datos. */
+function NotionConnected({ status, busy, onPick, onDisconnect }: { status: NotionStatus; busy: boolean; onPick?(): void; onDisconnect(): void }): JSX.Element {
+  const [checking, setChecking] = useState(false)
+  const [access, setAccess] = useState<{ at: Date; data: NotionAccess } | null>(null)
+  const [checkError, setCheckError] = useState<string | null>(null)
+  const [link, setLink] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkResult, setLinkResult] = useState<{ ok: true; data: NotionLinkCheck } | { ok: false; error: string } | null>(null)
+  const internal = status.method === 'internal'
+  const name = internal ? `«${status.bot ?? 'tu integración'}»` : 'Nido'
+
+  const check = async (): Promise<void> => {
+    setChecking(true)
+    setCheckError(null)
+    const r = await window.nido.notion.check()
+    setChecking(false)
+    if (r.ok) setAccess({ at: new Date(), data: r.data })
+    else {
+      setAccess(null)
+      setCheckError(r.error)
+      // Si Notion rechazó el token, main lo ha borrado: Ajustes y los widgets pasan a «Reconectar».
+      if (r.code === 'auth') notifyIntegrationsChanged()
+    }
+  }
+
+  const checkLink = async (): Promise<void> => {
+    setLinkBusy(true)
+    setLinkResult(null)
+    const r = await window.nido.notion.resolve(link)
+    setLinkBusy(false)
+    setLinkResult(r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error })
+  }
+
+  return (
+    <div className="settings-card">
+      <p>
+        Conectado al espacio <b>{status.workspace ?? 'de Notion'}</b>
+        {internal ? ` con la integración interna${status.bot ? ` «${status.bot}»` : ''}` : ' con la autorización oficial'}.
+      </p>
+      <div className="row wrap">
+        <button className="btn small" disabled={checking || busy} onClick={() => void check()}>
+          <Icon name="reload" size={13} /> {checking ? 'Comprobando…' : 'Comprobar conexión'}
+        </button>
+        {onPick && (
+          <button className="btn small" disabled={busy} onClick={onPick}>
+            <Icon name="edit" size={13} /> Elegir páginas
+          </button>
+        )}
+        <span className="grow" />
+        <button className="btn small danger-ghost" onClick={onDisconnect}>
+          Desconectar
+        </button>
+      </div>
+
+      {checkError && <ErrorBox message={checkError} />}
+      {access && (
+        <div className="check-result" role="status">
+          <p className="ok-line">
+            <Icon name="check" size={13} />
+            <span>
+              Notion respondió a las {timeOf.format(access.at)}: espacio <b>{access.data.workspace ?? '—'}</b>
+              {access.data.bot ? (
+                <>
+                  , integración <b>{access.data.bot}</b>
+                </>
+              ) : null}
+              .
+            </span>
+          </p>
+          {access.data.sources === 0 && access.data.pages.length === 0 ? (
+            <p className="warn-line">
+              <Icon name="alert" size={13} />
+              <span>
+                El token funciona, pero {name} no tiene acceso a nada todavía. En Notion, abre la base de datos o la página con tus casillas → ••• → Conexiones → Añadir conexiones → {name}. Después vuelve a
+                comprobar.
+              </span>
+            </p>
+          ) : (
+            <>
+              {access.data.sources > 0 && (
+                <>
+                  <p className="muted small-text">
+                    {access.data.sources} base{access.data.sources === 1 ? '' : 's'} de datos accesible{access.data.sources === 1 ? '' : 's'}:
+                  </p>
+                  <ul className="source-list">
+                    {access.data.list.map((s) => (
+                      <li key={s.id}>
+                        <Icon name="database" size={12} /> {s.title}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {access.data.pages.length > 0 && (
+                <>
+                  <p className="muted small-text">
+                    {access.data.pages.length} página{access.data.pages.length === 1 ? '' : 's'} accesible{access.data.pages.length === 1 ? '' : 's'} (para sus casillas):
+                  </p>
+                  <ul className="source-list">
+                    {access.data.pages.map((s) => (
+                      <li key={s.id}>
+                        <Icon name="file" size={12} /> {s.title}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
         </div>
-      </details>
+      )}
+
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void checkLink()
+        }}
+      >
+        <input className="input grow" aria-label="Enlace de una base de datos o página" placeholder="Enlace de una base de datos o página de Notion" value={link} onChange={(e) => setLink(e.target.value)} />
+        <button className="btn small" type="submit" disabled={!link.trim() || linkBusy}>
+          {linkBusy ? 'Comprobando…' : 'Comprobar enlace'}
+        </button>
+      </form>
+      {linkResult && !linkResult.ok && <ErrorBox message={linkResult.error} />}
+      {linkResult?.ok && (
+        <p className="ok-line">
+          <Icon name="check" size={13} />
+          <span>
+            {linkResult.data.kind === 'page' && linkResult.data.page
+              ? linkResult.data.page.todos.length
+                ? `Acceso correcto a la página «${linkResult.data.title}»: ${linkResult.data.page.todos.length} casilla${linkResult.data.page.todos.length === 1 ? '' : 's'} (${linkResult.data.page.todos.filter((t) => !t.checked).length} sin marcar).`
+                : `Acceso correcto a la página «${linkResult.data.title}», pero no tiene casillas (listas de tareas de Notion).`
+              : `Acceso correcto a la base de datos «${linkResult.data.title}»: ${linkResult.data.sources.map((s) => `${s.title} (${s.pages} página${s.pages === 1 ? '' : 's'})`).join(', ')}.`}
+          </span>
+        </p>
+      )}
+      <p className="muted small-text">La base de datos o la página de tareas se elige en el widget de Tareas (origen Notion).</p>
     </div>
   )
 }

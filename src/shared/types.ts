@@ -62,10 +62,18 @@ export interface NotionTaskConfig {
   doneValue?: string
 }
 
+/** Casillas (bloques to_do) de una página normal de Notion. */
+export interface NotionPageConfig {
+  pageId: string
+  name: string
+}
+
 export interface TasksData {
   tasks: Task[]
   source?: 'local' | 'notion'
   notion?: NotionTaskConfig
+  /** Si está, el widget usa las casillas de esta página en vez de una base de datos */
+  notionPage?: NotionPageConfig
   filters?: TaskFilters
 }
 
@@ -543,12 +551,21 @@ export interface NotionPage {
 /** Resultado de «Comprobar acceso». */
 export interface NotionAccess {
   workspace?: string
+  /** Nombre de la integración (bot) con la que se conectó */
+  bot?: string
+  method?: 'oauth' | 'internal'
   /** Bases de datos (fuentes de datos) que la conexión puede ver */
   sources: number
+  /** Las primeras que ve, para mostrarlas */
+  list: NotionSource[]
+  /** Páginas normales (no filas) que ve: pueden tener casillas */
+  pages: NotionSource[]
   /** La base de datos elegida se puede leer (si se indicó) */
   readable?: boolean
   /** Tareas que devuelve esa base de datos */
-  pages?: number
+  rows?: number
+  /** Por qué no se puede leer (sin compartir o sin la capacidad necesaria) */
+  problem?: string
 }
 
 export interface NotionApi {
@@ -569,6 +586,47 @@ export interface NotionApi {
   update(pageId: string, values: Record<string, NotionValue>, before?: Record<string, NotionValue>): Promise<Result<NotionPage>>
   /** Comprueba el token, cuántas bases de datos ve y si puede leer la elegida */
   check(dataSourceId?: string): Promise<Result<NotionAccess>>
+  /** Comprueba el enlace (o ID) de una base de datos y devuelve sus fuentes de datos legibles */
+  resolve(link: string): Promise<Result<NotionLinkCheck>>
+  /** Páginas normales compartidas con la conexión (no filas de bases de datos) */
+  searchPages(query: string): Promise<Result<NotionSource[]>>
+  /** Casillas de una página, recorriendo bloques anidados y paginando */
+  todos(pageId: string): Promise<Result<NotionPageTodos>>
+  /** Marca o desmarca una casilla; con before, falla con 'conflict' si cambió en Notion */
+  setTodo(blockId: string, checked: boolean, before?: boolean): Promise<Result<NotionTodo>>
+}
+
+export interface NotionLinkCheck {
+  /** Qué es el enlace: una base de datos (o fuente de datos) o una página normal */
+  kind: 'database' | 'page'
+  /** Nombre de la base de datos o de la página */
+  title: string
+  /** Fuentes de datos legibles (solo si es una base de datos) */
+  sources: (NotionSource & { pages: number })[]
+  /** Si es una página: sus casillas y las bases de datos que contiene */
+  page?: NotionPageTodos
+}
+
+/** Una casilla (bloque to_do) de una página. */
+export interface NotionTodo {
+  id: string
+  text: string
+  checked: boolean
+  /** 0 en el primer nivel; 1, 2… si está dentro de otra casilla */
+  depth: number
+  /** Encabezado bajo el que está, si lo hay */
+  section?: string
+}
+
+export interface NotionPageTodos {
+  id: string
+  title: string
+  url?: string
+  todos: NotionTodo[]
+  /** Bases de datos dentro de la página (bloques child_database) */
+  databases: NotionSource[]
+  /** La página es muy larga y no se leyó entera */
+  truncated: boolean
 }
 
 // ---------- Navegadores ----------
@@ -736,7 +794,11 @@ export const IPC = {
     query: 'nido:notion:query',
     create: 'nido:notion:create',
     update: 'nido:notion:update',
-    check: 'nido:notion:check'
+    check: 'nido:notion:check',
+    resolve: 'nido:notion:resolve',
+    searchPages: 'nido:notion:searchPages',
+    todos: 'nido:notion:todos',
+    setTodo: 'nido:notion:setTodo'
   },
   browsers: {
     list: 'nido:browsers:list',
