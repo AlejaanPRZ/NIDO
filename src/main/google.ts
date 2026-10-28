@@ -134,7 +134,9 @@ async function authorize(clientId: string): Promise<{ code: string; redirectUri:
     code_challenge_method: 'S256',
     state,
     access_type: 'offline',
-    prompt: 'consent'
+    // select_account: Google siempre deja elegir la cuenta (también para «Cambiar cuenta»);
+    // consent: garantiza un refresh token nuevo aunque ya se hubiera autorizado antes.
+    prompt: 'select_account consent'
   })
   const authUrl = `${AUTH_URL}?${params}`
   try {
@@ -180,9 +182,14 @@ async function tokenRequest(body: Record<string, string>): Promise<any> {
   return json
 }
 
+/** Revoca un token en Google (sin red, la desconexión en Nido vale igual). */
+const revoke = (token: string): Promise<unknown> => fetch(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }).catch(() => undefined)
+
 async function connect(): Promise<GoogleStatus> {
   pendingConnect ??= (async () => {
     const { clientId, clientSecret } = await credentials()
+    if (!(await encryptionAvailable())) throw new NidoError('config', 'El cifrado de Windows no está disponible; Nido no guardará credenciales sin cifrar.')
+    const previous = await getSecret('google.refreshToken')
     const { code, redirectUri, verifier } = await authorize(clientId)
     const tokens = await tokenRequest({
       client_id: clientId,
@@ -193,13 +200,28 @@ async function connect(): Promise<GoogleStatus> {
       redirect_uri: redirectUri
     })
     if (!tokens.refresh_token) throw new NidoError('auth', 'Google no devolvió un token de actualización.')
+    // Consentimiento granular: en la pantalla de Google se pueden desmarcar permisos. Sin los dos,
+    // Nido no puede funcionar, así que no se guarda una conexión a medias.
+    const granted = new Set(String(tokens.scope ?? SCOPES.join(' ')).split(/\s+/))
+    const missing = SCOPES.filter((s) => !granted.has(s))
+    if (missing.length) {
+      void revoke(tokens.refresh_token)
+      throw new NidoError(
+        'forbidden',
+        `No se concedieron todos los permisos (${missing.map((s) => (s.endsWith('readonly') ? 'ver tu lista de calendarios' : 'ver y editar eventos')).join(' y ')}). Vuelve a conectar y deja marcadas las casillas de Google Calendar.`
+      )
+    }
     await setSecret('google.refreshToken', tokens.refresh_token)
+    invalidate()
+    calendarColors.clear()
     accessToken = { value: tokens.access_token, expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000 }
     const calendars = await listCalendars()
     const primary = calendars.find((c) => c.primary)
     updateConfig((c) => {
       c.google = { ...c.google, account: primary?.id, expired: false }
     })
+    // Cambio de cuenta: el acceso de la anterior se retira también en Google.
+    if (previous && previous !== tokens.refresh_token) void revoke(previous)
     return status()
   })().finally(() => {
     pendingConnect = null
@@ -210,10 +232,8 @@ async function connect(): Promise<GoogleStatus> {
 async function disconnect(): Promise<GoogleStatus> {
   const refresh = await getSecret('google.refreshToken')
   forgetAccount()
-  if (refresh) {
-    // Revocar en Google es lo correcto, pero si no hay red la cuenta queda desconectada en Nido igualmente.
-    await fetch(`${REVOKE_URL}?token=${encodeURIComponent(refresh)}`, { method: 'POST' }).catch(() => undefined)
-  }
+  // Revocar en Google es lo correcto, pero si no hay red la cuenta queda desconectada en Nido igualmente.
+  if (refresh) await revoke(refresh)
   return status()
 }
 
@@ -373,7 +393,9 @@ export function registerGoogle(): void {
     return null
   })
   handleResult(IPC.google.disconnect, () => disconnect())
-  handleResult(IPC.google.calendars, () => {
+  handleResult(IPC.google.calendars, (force?: boolean) => {
+    // «Actualizar» en Ajustes: lista y eventos nuevos, sin caché.
+    if (force) invalidate()
     const hit = cached(calendarsCache, CALENDARS_TTL)
     if (hit) return hit
     const value = listCalendars()

@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState, type Dispatch } from 'react'
-import type { AppState, LayoutItem, Settings, Widget, WidgetDataMap, WidgetType, Workspace } from '../../shared/types'
+import type { AppState, LayoutItem, Palette, Settings, Widget, WidgetDataMap, WidgetType, Workspace } from '../../shared/types'
 import { resolveOverlaps, settle } from './layoutEngine'
 import { COLLAPSED_H, WIDGETS, WIDGET_TYPES, type SizeName } from './registry'
 import { uid } from './util'
@@ -100,10 +100,14 @@ export function arrange(ws: Workspace): LayoutItem[] {
   return ws.layout.map((l) => result.get(l.i) ?? l)
 }
 
+export const PALETTES: Palette[] = ['nido', 'terra', 'bosque', 'aurora', 'grafito']
+
 export function defaultSettings(): Settings {
   const hour12 = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12 ?? false
   return {
     theme: 'system',
+    palette: 'nido',
+    animatedBackground: false,
     locked: false,
     reduceTransparency: false,
     glass: 60,
@@ -199,6 +203,8 @@ function sanitize(raw: any): AppState {
     ...raw.settings,
     clock: { ...defaults.clock, ...raw.settings?.clock },
     favorites: Array.isArray(raw.settings?.favorites) ? raw.settings.favorites : [],
+    palette: PALETTES.includes(raw.settings?.palette) ? raw.settings.palette : defaults.palette,
+    animatedBackground: !!raw.settings?.animatedBackground,
     glass: Number.isFinite(raw.settings?.glass) ? Math.min(100, Math.max(0, Math.round(raw.settings.glass))) : defaults.glass
   }
   const active = workspaces.some((w: Workspace) => w.id === raw.activeWorkspace) ? raw.activeWorkspace : workspaces[0].id

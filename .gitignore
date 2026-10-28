@@ -7,3 +7,5 @@ release/
 nido.oauth.json
 server/notion-oauth/.wrangler/
 server/notion-oauth/.dev.vars
+# JSON de cliente OAuth descargado de Google Cloud
+client_secret*.json

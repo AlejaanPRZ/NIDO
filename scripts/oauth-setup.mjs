@@ -29,7 +29,9 @@ if (service === 'google') {
   if (!/\.apps\.googleusercontent\.com$/.test(client.client_id ?? '')) fail('El archivo no trae un client_id válido.')
   config.google = { clientId: client.client_id, ...(client.client_secret ? { clientSecret: client.client_secret } : {}) }
   write(config)
-  console.log(`✓ Google configurado (${client.client_id.slice(0, 12)}…). Vuelve a compilar: npm run build`)
+  console.log(`✓ Google configurado (${client.client_id.slice(0, 12)}…).`)
+  console.log('  En desarrollo basta con cerrar y abrir Nido (se lee al arrancar). Para otras personas: npm run dist (el instalador lo incluye).')
+  console.log('  El JSON descargado ya no hace falta: guárdalo fuera del proyecto o bórralo.')
 } else if (service === 'notion') {
   const [clientId, brokerUrl] = args
   if (!clientId || !brokerUrl) fail('Uso: npm run oauth -- notion <id de la integración> <https://tu-intercambiador>')

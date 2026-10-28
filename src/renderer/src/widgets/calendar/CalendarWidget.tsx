@@ -89,7 +89,7 @@ function useReminders(events: CalEvent[], enabled: boolean, minutes: number, wid
 }
 
 export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX.Element {
-  const { openSettings } = useApp()
+  const { openSettings, settings } = useApp()
   const data = widget.data
   const source = data.source ?? 'local'
   const view = data.view ?? 'month'
@@ -109,7 +109,7 @@ export function CalendarWidget({ widget, update }: WidgetProps<'calendar'>): JSX
     // todayKey hace que el rango «próximo» avance al cambiar de día.
   }, [view, cursor.getTime(), todayKey])
 
-  const google = useGoogleCalendar(source === 'google', data.calendars, ranges)
+  const google = useGoogleCalendar(source === 'google', data.calendars ?? settings.googleCalendars, ranges)
   const localEvents = useMemo(() => data.events.map(fromLocal), [data.events])
   const events = source === 'google' ? google.events : localEvents
 

@@ -478,7 +478,10 @@ export default function App(): JSX.Element {
     root.dataset.transparency = settings.reduceTransparency ? 'reduced' : 'full'
     root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full'
     root.style.setProperty('--glass-k', String(settings.glass / 100))
-  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion, settings.glass])
+    if (settings.palette === 'nido') delete root.dataset.palette
+    else root.dataset.palette = settings.palette
+    root.dataset.bgMotion = settings.animatedBackground ? 'on' : 'off'
+  }, [settings.theme, settings.reduceTransparency, settings.reduceMotion, settings.glass, settings.palette, settings.animatedBackground])
 
   // Al cambiar de espacio se cierra el widget ampliado.
   useEffect(() => setExpanded(null), [state.activeWorkspace])

@@ -12,20 +12,61 @@ Sin ella, Ajustes ofrece las alternativas avanzadas (cliente de Google propio o 
 ## Google Calendar
 
 Flujo: OAuth 2.0 para apps de escritorio (navegador del sistema, redirección a `127.0.0.1` en un puerto
-aleatorio, PKCE S256). Google considera las apps de escritorio clientes públicos: su «secreto» no es
-confidencial y puede ir en la app. Permisos: `calendar.calendarlist.readonly` y `calendar.events`.
+aleatorio, PKCE S256, `prompt=select_account consent`). Google considera las apps de escritorio clientes
+públicos: su «secreto» no es confidencial y puede ir en la app. Permisos: `calendar.calendarlist.readonly`
+(ver la lista de calendarios) y `calendar.events` (ver y editar eventos). Si el usuario desmarca alguno en
+la pantalla de Google, Nido no guarda la conexión y lo explica.
 
-1. En [Google Cloud](https://console.cloud.google.com/projectcreate), crea un proyecto y habilita
-   **Google Calendar API**.
-2. En **Google Auth Platform → Branding**, rellena nombre (Nido), correo de asistencia y logo.
-3. En **Audience**, elige **Externo**. Mientras esté «En prueba», solo entran los usuarios de prueba
-   que añadas (hasta 100) y Google caduca el acceso cada 7 días.
-4. En **Data access**, añade los dos permisos de arriba.
-5. En **Clients → Create client**, tipo **Aplicación de escritorio**. Copia el ID y el secreto en
-   `nido.oauth.json` → `google.clientId` y `google.clientSecret`.
-6. Para que cualquiera pueda conectar sin la pantalla de «app no verificada» y sin caducar a los 7 días:
-   **Publicar la app** y pasar la verificación de Google (`calendar.events` es un permiso sensible:
-   pide política de privacidad, dominio verificado y un vídeo del uso).
+### Una sola vez, para probar con tu cuenta (modo «En prueba»)
+
+1. **Proyecto:** en [Google Cloud](https://console.cloud.google.com/projectcreate) crea un proyecto
+   (por ejemplo «Nido») o elige uno tuyo.
+2. **API:** en [Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com)
+   pulsa **Habilitar**.
+3. **Pantalla de consentimiento:** en [Google Auth Platform](https://console.cloud.google.com/auth/overview)
+   → **Empezar**:
+   - Información de la app: nombre «Nido» y tu correo de asistencia.
+   - Público: **Externo** (con una cuenta @gmail.com no hay «Interno»).
+   - Datos de contacto: tu correo. Acepta la política de datos de usuario.
+4. **Permisos:** en **Acceso a datos** → **Añadir o quitar permisos**, marca
+   `.../auth/calendar.calendarlist.readonly` y `.../auth/calendar.events` y guarda.
+5. **Usuarios de prueba:** en **Público** → **Usuarios de prueba** → **Añadir usuarios**, añade tu correo
+   de Google (y el de quien vaya a probar; máximo 100).
+6. **Cliente:** en **Clientes** → **Crear cliente** → tipo **Aplicación de escritorio**, nombre «Nido».
+   Pulsa **Descargar JSON** (`client_secret_….json`).
+7. **En Nido:** desde la carpeta del proyecto,
+   ```bash
+   npm run oauth -- google "C:\ruta\client_secret_….json"
+   ```
+   Escribe `nido.oauth.json` (fuera de git). Cierra y abre Nido: «Conectar con Google» ya funciona.
+   El JSON descargado no hace falta después.
+
+Qué esperar en modo «En prueba»:
+- Solo pueden conectar las cuentas añadidas como usuarios de prueba.
+- Google muestra el aviso «Google no ha verificado esta aplicación»: pulsa **Continuar**.
+- **La autorización caduca a los 7 días.** Nido lo detecta y muestra «Volver a conectar».
+
+### Para distribuir Nido a otras personas
+
+- **Publicar:** en **Público** → **Publicar app** (estado «En producción»). Así cualquier cuenta de Google
+  puede intentar conectar y el acceso deja de caducar a los 7 días.
+- **Verificación:** `calendar.events` es un permiso **sensible**. Sin verificar:
+  - Todo el mundo ve el aviso de app no verificada.
+  - Hay un límite de **100 usuarios nuevos en toda la vida del proyecto**, que no se puede reiniciar.
+- La verificación pide:
+  - Una página de inicio en un dominio propio verificado (Search Console).
+  - Una política de privacidad en ese dominio, enlazada desde la pantalla de consentimiento.
+  - Justificar cada permiso.
+  - Un vídeo (en inglés) del flujo completo con la pantalla de consentimiento.
+- Google indica unos días hábiles de revisión; en la práctica puede tardar semanas.
+- Excepción: un uso personal con menos de 100 usuarios no necesita verificación, pero mantiene el aviso.
+- Las cuentas de Google Workspace pueden tener bloqueadas las apps no verificadas por su administrador.
+- **Instalador:** `npm run dist` copia `nido.oauth.json` junto a la app (`extraResources`).
+
+Referencias: [OAuth para apps de escritorio](https://developers.google.com/identity/protocols/oauth2/native-app),
+[estado de publicación](https://support.google.com/cloud/answer/15549945),
+[cuándo no hace falta verificar](https://support.google.com/cloud/answer/13464323),
+[verificación de permisos sensibles](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification).
 
 ## Notion
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionAccess, NotionLinkCheck, NotionStatus, Theme } from '../../shared/types'
+import type { AppState, ErrorCode, ExportFile, GoogleCalendar, GoogleStatus, NotionAccess, NotionLinkCheck, NotionStatus, Palette, Theme } from '../../shared/types'
 import { BrandLogo, brandOfBrowser, hasBrand } from './BrandLogo'
 import { CATALOG } from './catalog'
 import { useApp, type SettingsSection } from './context'
@@ -99,6 +99,15 @@ function Group({ title, children, description }: { title: string; description?: 
 
 // ---------- General ----------
 
+/** Muestras de cada estilo (los colores de su fondo y su acento en claro). */
+const PALETTE_OPTIONS: { id: Palette; label: string; hint: string; swatch: string; dot: string }[] = [
+  { id: 'nido', label: 'Nido', hint: 'Azules y celestes', swatch: 'linear-gradient(135deg, #cfe2ff, #8fd3ff 55%, #e6eef9)', dot: '#007aff' },
+  { id: 'terra', label: 'Terra', hint: 'Terracota, ocre y arena', swatch: 'linear-gradient(135deg, #f0b07a, #e8a13c 45%, #f1e4d4)', dot: '#c4531c' },
+  { id: 'bosque', label: 'Bosque', hint: 'Salvia y musgo', swatch: 'linear-gradient(135deg, #a9cfa6, #c6dca0 50%, #e5ede4)', dot: '#237a4b' },
+  { id: 'aurora', label: 'Aurora', hint: 'Violeta y rosa', swatch: 'linear-gradient(135deg, #c3a8ff, #ffb0d6 55%, #ebe6f6)', dot: '#7a3fe0' },
+  { id: 'grafito', label: 'Grafito', hint: 'Grises neutros', swatch: 'linear-gradient(135deg, #c9c9cf, #e2e2e7 55%, #f4f4f6)', dot: '#34343c' }
+]
+
 function GeneralSection(): JSX.Element {
   const { settings, dispatch } = useApp()
   const set = (patch: Partial<typeof settings>): void => dispatch({ type: 'settings', patch })
@@ -118,10 +127,34 @@ function GeneralSection(): JSX.Element {
             onChange={(theme) => set({ theme })}
           />
         </div>
+        <div className="setting-block">
+          <span>
+            Estilo
+            <small className="muted">Colores del fondo, del cristal y de los botones. Cada estilo tiene versión clara y oscura.</small>
+          </span>
+          <div className="palette-picker" role="radiogroup" aria-label="Estilo">
+            {PALETTE_OPTIONS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={settings.palette === p.id}
+                className={`palette-option ${settings.palette === p.id ? 'active' : ''}`}
+                title={p.hint}
+                onClick={() => set({ palette: p.id })}
+              >
+                <span className="palette-swatch" style={{ background: p.swatch }} aria-hidden="true">
+                  <span style={{ background: p.dot }} />
+                </span>
+                <span className="palette-name">{p.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className={`setting-row ${settings.reduceTransparency ? 'is-disabled' : ''}`}>
           <span className="grow">
             Intensidad del cristal
-            <small className="muted">Más translucidez y desenfoque, o superficies más sólidas y legibles.</small>
+            <small className="muted">Más translucidez y desenfoque, o superficies más sólidas y legibles. Por encima del 60 % el cristal se vuelve más líquido y transparente.</small>
           </span>
           <input
             type="range"
@@ -143,6 +176,16 @@ function GeneralSection(): JSX.Element {
           description="Superficies opacas y sin desenfoque: más contraste y menos consumo."
           checked={settings.reduceTransparency}
           onChange={(v) => set({ reduceTransparency: v })}
+        />
+        <Toggle
+          label="Fondo animado"
+          description={
+            settings.reduceMotion || settings.reduceTransparency
+              ? 'No se mueve mientras estén activados «Reducir movimiento» o «Reducir transparencia».'
+              : 'Los degradados del fondo se mueven despacio. Usa algo más de tarjeta gráfica; se paran al arrastrar widgets.'
+          }
+          checked={settings.animatedBackground}
+          onChange={(v) => set({ animatedBackground: v })}
         />
         <Toggle label="Reducir movimiento" description="Sin animaciones ni transiciones." checked={settings.reduceMotion} onChange={(v) => set({ reduceMotion: v })} />
       </Group>
@@ -371,6 +414,7 @@ function WaitingBrowser({ service, onCancel }: { service: string; onCancel(): vo
 }
 
 function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
+  const { settings, dispatch } = useApp()
   const [status, setStatus] = useState<GoogleStatus | null>(null)
   const [clientId, setClientId] = useState('')
   const [secret, setSecret] = useState('')
@@ -378,21 +422,40 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
   const [error, setError] = useState<{ message: string; code: ErrorCode } | null>(null)
   const [advanced, setAdvanced] = useState(false)
   const [calendars, setCalendars] = useState<GoogleCalendar[] | null>(null)
+  const [calError, setCalError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
 
   useEffect(() => {
     window.nido.google.status().then((r) => {
       if (!r.ok) return
       setStatus(r.data)
       setClientId(r.data.clientId)
-      // Sin cliente integrado ni propio, lo único posible es configurarlo: se abre directamente.
-      if (!r.data.builtIn && !r.data.clientId) setAdvanced(true)
     })
   }, [])
 
+  const loadCalendars = async (force = false): Promise<void> => {
+    setRefreshing(true)
+    const r = await window.nido.google.calendars(force)
+    setRefreshing(false)
+    if (r.ok) {
+      setCalendars(r.data)
+      setCalError(null)
+      setRefreshedAt(new Date())
+      if (force) notifyIntegrationsChanged() // los widgets vuelven a pedir eventos
+    } else {
+      setCalError(r.error)
+      if (r.code === 'auth') window.nido.google.status().then((s) => s.ok && setStatus(s.data))
+    }
+  }
+
   useEffect(() => {
-    if (!status?.connected) return setCalendars(null)
-    window.nido.google.calendars().then((r) => setCalendars(r.ok ? r.data : []))
-  }, [status?.connected])
+    if (!status?.connected) {
+      setCalendars(null)
+      return
+    }
+    void loadCalendars()
+  }, [status?.connected, status?.account])
 
   const apply = (r: Awaited<ReturnType<typeof window.nido.google.status>>, message?: string): boolean => {
     if (r.ok) {
@@ -410,7 +473,6 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
       return false
     }
     setError({ message: r.error, code: r.code })
-    if (r.code === 'config') setAdvanced(true)
     return false
   }
 
@@ -430,25 +492,25 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
     if (ok) apply(await window.nido.google.clearCredentials(), 'Ahora se usa el cliente de Nido')
   }
 
-  const connect = async (): Promise<void> => {
-    if (clientId.trim() && (clientId.trim() !== status?.clientId || secret)) {
-      if (!(await saveCredentials())) return
-    }
+  const connect = async (switching = false): Promise<void> => {
     setBusy('connect')
     setError(null)
-    apply(await window.nido.google.connect(), 'Google Calendar conectado')
+    const before = status?.account
+    const r = await window.nido.google.connect()
+    if (r.ok && switching && before && r.data.account !== before) dispatch({ type: 'settings', patch: { googleCalendars: undefined } })
+    apply(r, switching && r.ok && r.data.account === before ? 'Sigues conectado con la misma cuenta' : 'Google Calendar conectado')
     setBusy(null)
   }
 
   const disconnect = async (): Promise<void> => {
     const ok = await confirmDialog({
       title: 'Desconectar Google Calendar',
-      message: 'Nido revocará su acceso y dejará de mostrar tus eventos. Tus eventos en Google no se tocan.',
+      message: 'Nido revocará su acceso en Google y dejará de mostrar tus eventos. Tus eventos en Google no se tocan.',
       confirmLabel: 'Desconectar'
     })
     if (!ok) return
     setBusy('disconnect')
-    apply(await window.nido.google.disconnect(), 'Google Calendar desconectado')
+    if (apply(await window.nido.google.disconnect(), 'Google Calendar desconectado')) dispatch({ type: 'settings', patch: { googleCalendars: undefined } })
     setBusy(null)
   }
 
@@ -457,45 +519,61 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
   const state: ConnState = busy === 'connect' ? 'connecting' : status.connected ? 'connected' : status.expired ? 'expired' : error ? 'error' : canConnect ? 'disconnected' : 'unconfigured'
   const logo = <BrandLogo brand="google-calendar" name="Google Calendar" size={40} decorative />
 
+  // Calendarios que Nido muestra por defecto: los elegidos aquí o, si no hay elección, los marcados en Google.
+  const chosen = new Set(settings.googleCalendars ?? calendars?.filter((c) => c.selected || c.primary).map((c) => c.id) ?? [])
+  const toggleCalendar = (id: string): void => {
+    const next = new Set(chosen)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    dispatch({ type: 'settings', patch: { googleCalendars: (calendars ?? []).map((c) => c.id).filter((c) => next.has(c)) } })
+  }
+
   return (
     <div className="conn-detail">
       <DetailHeader title="Google Calendar" logo={logo} state={state} account={status.account} onBack={onBack} />
       {!status.encryption && <ErrorBox message="El cifrado de Windows no está disponible: Nido no guardará credenciales." />}
-      {status.expired && !status.connected && busy !== 'connect' && (
-        <ErrorBox message="Google caducó o revocó el acceso. Vuelve a conectar para seguir viendo tus eventos." code="auth" onAction={() => void connect()} />
+      {status.expired && !status.connected && busy !== 'connect' && !error && (
+        <ErrorBox message="Google caducó o revocó el acceso. Vuelve a conectar para seguir viendo tus eventos." code={canConnect ? 'auth' : undefined} onAction={() => void connect()} />
       )}
-      {error && <ErrorBox message={error.message} code={error.code} onAction={(c) => (c === 'config' ? setAdvanced(true) : void connect())} />}
+      {error && <ErrorBox message={error.message} code={error.code === 'forbidden' ? 'auth' : error.code} onAction={(c) => (c === 'config' ? setAdvanced(true) : void connect())} />}
 
       {status.connected ? (
         <div className="settings-card">
           <p>
             Conectado como <b>{status.account ?? 'tu cuenta'}</b>.
           </p>
+          <p className="muted small-text">Calendarios que muestran los widgets de Nido (cada widget puede cambiarlos desde su botón de calendarios):</p>
           <div className="calendar-list">
-            {calendars === null ? (
+            {calError ? (
+              <ErrorBox message={calError} />
+            ) : calendars === null ? (
               <Spinner size={12} />
             ) : calendars.length === 0 ? (
-              <p className="muted small-text">No se pudo leer la lista de calendarios.</p>
+              <p className="muted small-text">Esta cuenta no tiene calendarios.</p>
             ) : (
               calendars.map((c) => (
-                <div key={c.id} className="calendar-row">
+                <label key={c.id} className="calendar-row">
+                  <input type="checkbox" checked={chosen.has(c.id)} onChange={() => toggleCalendar(c.id)} aria-label={`Mostrar ${c.name}`} />
                   <span className="cal-dot" style={{ background: c.color }} />
                   <span className="grow ellipsis">{c.name}</span>
                   <span className="tag soft">{c.canWrite ? 'Editable' : 'Solo lectura'}</span>
-                </div>
+                </label>
               ))
             )}
           </div>
-          <p className="muted small-text">Cada widget de calendario elige qué calendarios muestra desde su botón de calendarios.</p>
-          <div className="row">
-            <button className="btn small" disabled={busy !== null} onClick={() => void connect()}>
-              <Icon name="reload" size={13} /> Cambiar de cuenta
+          <div className="row wrap">
+            <button className="btn small" disabled={busy !== null || refreshing} onClick={() => void loadCalendars(true)}>
+              <Icon name="reload" size={13} /> {refreshing ? 'Actualizando…' : 'Actualizar'}
+            </button>
+            <button className="btn small" disabled={busy !== null || !canConnect} onClick={() => void connect(true)}>
+              <Icon name="swap" size={13} /> Cambiar cuenta
             </button>
             <span className="grow" />
             <button className="btn small danger-ghost" disabled={busy !== null} onClick={() => void disconnect()}>
               Desconectar
             </button>
           </div>
+          {refreshedAt && <p className="muted small-text">Lista leída de Google a las {timeOf.format(refreshedAt)}.</p>}
         </div>
       ) : busy === 'connect' ? (
         <WaitingBrowser service="Google" onCancel={() => void window.nido.google.cancel()} />
@@ -503,13 +581,15 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
         <div className="signin-card">
           <p>Se abrirá tu navegador para que elijas tu cuenta de Google y autorices a Nido. Nido nunca ve tu contraseña.</p>
           <SignInButton brand="google" label={status.expired ? 'Volver a conectar con Google' : 'Conectar con Google'} busy={busy !== null} onClick={() => void connect()} />
-          <p className="muted small-text">Nido podrá ver tu lista de calendarios y crear, editar o borrar eventos. Nada más.</p>
+          <p className="muted small-text">Nido podrá ver tu lista de calendarios y ver, crear, editar o borrar eventos. Nada más.</p>
         </div>
       ) : (
-        <div className="settings-card">
+        <div className="signin-card">
           <p>
-            <b>Esta copia de Nido no trae la conexión con Google preparada.</b> Quien publica Nido tiene que registrarla una vez en Google Cloud (ver CONEXIONES.md). Mientras, puedes usar un cliente OAuth propio en las opciones avanzadas.
+            <b>La conexión con Google aún no está disponible en esta copia de Nido.</b> Antes, quien publica Nido tiene que registrarla una vez en Google Cloud; después bastará con este botón.
           </p>
+          <SignInButton brand="google" label="Conectar con Google" busy={false} disabled onClick={() => undefined} />
+          <p className="muted small-text">Si tienes tu propio proyecto de Google Cloud, puedes usarlo en las opciones avanzadas.</p>
         </div>
       )}
 
@@ -548,7 +628,7 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
               placeholder={status.hasClientSecret ? '•••••••• — escribe para cambiarlo' : 'GOCSPX-…'}
               onChange={(e) => setSecret(e.target.value)}
             />
-            <small className="muted">Google lo genera también para apps de escritorio y suele exigirlo. En estas apps no es confidencial; Nido lo guarda cifrado igualmente.</small>
+            <small className="muted">Google lo genera también para apps de escritorio. En estas apps no es confidencial; Nido lo guarda cifrado igualmente.</small>
           </label>
           <div className="row">
             <button className="btn small" disabled={!clientId.trim() || busy !== null || (clientId === status.clientId && !secret)} onClick={() => void saveCredentials()}>
@@ -562,10 +642,10 @@ function GoogleDetail({ onBack }: { onBack(): void }): JSX.Element {
           </div>
           <div className="tech">
             <p>
-              <b>Permisos:</b> calendar.calendarlist.readonly (ver tu lista de calendarios) y calendar.events (crear, editar y borrar eventos).
+              <b>Permisos:</b> calendar.calendarlist.readonly (ver tu lista de calendarios) y calendar.events (ver, crear, editar y borrar eventos). Si en Google desmarcas alguno, Nido no guarda la conexión.
             </p>
             <p>
-              <b>Método:</b> OAuth 2.0 para apps de escritorio en el navegador del sistema, con redirección a 127.0.0.1 en un puerto aleatorio y PKCE (S256). El token se guarda cifrado con Windows.
+              <b>Método:</b> OAuth 2.0 para apps de escritorio en el navegador del sistema, con redirección a 127.0.0.1 en un puerto aleatorio y PKCE (S256). El token se guarda cifrado con Windows y se revoca al desconectar.
             </p>
           </div>
         </div>

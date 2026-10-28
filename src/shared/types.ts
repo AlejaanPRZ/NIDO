@@ -318,6 +318,8 @@ export type WidgetOf<K extends WidgetType> = Extract<Widget, { type: K }>
 // ---------- Estado global ----------
 
 export type Theme = 'system' | 'light' | 'dark'
+/** Estilo de color (Ajustes → Estilo); cada uno tiene versión clara y oscura */
+export type Palette = 'nido' | 'terra' | 'bosque' | 'aurora' | 'grafito'
 
 export interface Workspace {
   id: string
@@ -332,6 +334,9 @@ export interface Workspace {
 
 export interface Settings {
   theme: Theme
+  palette: Palette
+  /** Los degradados del fondo se mueven despacio */
+  animatedBackground: boolean
   locked: boolean
   reduceTransparency: boolean
   /** Intensidad del cristal (0–100): translucidez y desenfoque de las superficies */
@@ -343,6 +348,8 @@ export interface Settings {
   defaultBrowser: string
   /** Ids del catálogo marcados como favoritos */
   favorites: string[]
+  /** Calendarios de Google que muestran por defecto los widgets (Ajustes); sin valor, los marcados en Google */
+  googleCalendars?: string[]
 }
 
 export interface AppState {
@@ -491,7 +498,8 @@ export interface GoogleApi {
   /** Cancela la espera de la autorización en el navegador */
   cancel(): Promise<Result<null>>
   disconnect(): Promise<Result<GoogleStatus>>
-  calendars(): Promise<Result<GoogleCalendar[]>>
+  /** Lista de calendarios (con force, sin caché) */
+  calendars(force?: boolean): Promise<Result<GoogleCalendar[]>>
   events(query: GoogleEventsQuery): Promise<Result<GoogleEventsResult>>
   createEvent(calendarId: string, input: EventInput): Promise<Result<CalEvent>>
   updateEvent(calendarId: string, eventId: string, input: EventInput): Promise<Result<CalEvent>>
